@@ -53,6 +53,42 @@ geographic data files, so the page stays a single dependency-free file. The
 lon/lat → pixel projection is a small function in the script, so real
 coordinates just work.
 
+## The editor (`/editor` + `/server`)
+
+`index.html` at the repo root is the public-facing page above, still running
+on sample data. `/editor` and `/server` are the start of the actual
+forecaster tool that will publish to it: a pannable/zoomable map (top
+toolbar, left data panel, map filling the rest) backed by a real database,
+where a "system" starts life as a **Disturbance** — a probability-colored
+X you place on the map — and will progress through Invest → ETD → named
+ETS → Category 1-5 as later milestones add the rest of the lifecycle.
+
+This first milestone is intentionally a thin, real, end-to-end slice, not
+the full editor: place a Disturbance, set its formation probability/
+pressure/wind, save, reload, see it persisted. No cone, AOI shapes, arrow
+tool, watches/warnings, or auth yet — those land in later milestones on top
+of this same foundation.
+
+To run it:
+
+```
+cd server
+npm install
+npm start
+```
+
+Then open `http://localhost:3000` — the server serves the editor's static
+files and its JSON API (`/api/systems`) from one process, so there's no
+separate dev server or CORS to think about. Data lives in a local SQLite
+file (`server/data/`, gitignored) via Node's built-in `node:sqlite` — no
+external database to install for development. Production hosting (a real
+Postgres or similar, plus auth so the editor isn't publicly writable) is a
+later, separate decision.
+
+The map geometry (`editor/assets/*.geojson`) and the pan/zoom/rendering
+approach are adapted from an earlier prototype of this same idea, cropped
+down to the Atlantic/US basin to keep the repo small.
+
 ## Disclaimer
 
 This is an independent hobby project, not affiliated with NOAA, the National

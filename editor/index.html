@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NorEASterCaster Editor</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Ccircle%20cx='16'%20cy='16'%20r='15'%20fill='%230b1f3a'/%3E%3Ctext%20x='16'%20y='22'%20font-size='17'%20font-family='system-ui,sans-serif'%20font-weight='700'%20fill='%23ffffff'%20text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-shell">
+  <header class="toolbar">
+    <div class="toolbar__title">
+      <strong>NorEASterCaster Editor</strong>
+      <span>Milestone 1 &middot; Disturbances</span>
+    </div>
+    <div class="tool-group">
+      <button data-tool="select" class="is-active">Select / Move</button>
+      <button data-tool="create-disturbance">Create Disturbance</button>
+    </div>
+    <button id="deselect-btn">Deselect</button>
+    <span id="placement-hint" class="placement-hint" hidden>Click the map to place the new disturbance</span>
+    <div class="toolbar__spacer"></div>
+    <button id="reset-view-btn">Reset View</button>
+  </header>
+
+  <div class="workspace">
+    <aside class="sidebar">
+      <section class="panel-section">
+        <h2>Systems</h2>
+        <ul id="systems-list" class="systems-list"></ul>
+      </section>
+
+      <section class="panel-section">
+        <h2>Selected System</h2>
+        <p id="empty-hint" class="empty-hint">Select a system, or use Create Disturbance to add one.</p>
+        <div id="selected-panel" hidden></div>
+      </section>
+    </aside>
+
+    <div id="map-wrap" class="map-wrap">
+      <svg id="map"></svg>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
