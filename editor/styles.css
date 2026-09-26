@@ -119,7 +119,11 @@ button:disabled:hover { border-color: var(--ui-border); }
 .field input {
   border: 1px solid var(--ui-border); border-radius: 7px; padding: 6px 8px; font-size: 13px; color: var(--ui-text);
 }
-.selected-actions { display: flex; gap: 8px; margin-top: 12px; }
+/* flex-wrap: with 3 buttons (Save/Investigate/Delete), their combined
+   natural width can exceed the sidebar's ~276px content width -- without
+   wrap, flex items don't shrink below their text's min-content width, so
+   the row overflows the panel instead of breaking to a second line. */
+.selected-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .selected-actions button { flex: 1; }
 
 .map-wrap { flex: 1; position: relative; background: var(--water-color); }
