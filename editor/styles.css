@@ -143,6 +143,15 @@ button:disabled:hover { border-color: var(--ui-border); }
 .point-label { fill: #0b1f3a; font-weight: 700; text-anchor: middle; paint-order: stroke fill; stroke: #fff; stroke-width: 3px; vector-effect: non-scaling-stroke; }
 .point-selection-ring { fill: none; stroke: var(--ui-accent); stroke-width: 1.6px; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
 
+/* Not-yet-formed systems: hide the X/label (nothing physically exists to
+   point to yet) but keep the same hit-area interactive -- opacity, not
+   display/visibility, so click-to-select and drag-to-move still work. */
+.system-point.unformed .point-x-outline,
+.system-point.unformed .point-x-fill,
+.system-point.unformed .point-label {
+  opacity: 0;
+}
+
 /* Shapes & arrows: fills/lines always render (see annotationRenderer.js);
    only .annotation-vertex-handle circles are gated on selection. Color
    (fill/stroke) is deliberately NOT set here for the non-draft classes --

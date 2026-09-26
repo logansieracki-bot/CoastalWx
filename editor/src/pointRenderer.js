@@ -33,7 +33,7 @@ export function createPointRenderer(svg) {
       const color = systemColor(system);
 
       const group = el('g', {
-        class: `system-point${isSelected ? ' selected' : ''}`,
+        class: `system-point${isSelected ? ' selected' : ''}${system.formed ? '' : ' unformed'}`,
         'data-system-id': system.id,
         transform: `translate(${system.lon} ${-system.lat})`
       });
