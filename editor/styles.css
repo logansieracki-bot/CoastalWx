@@ -14,7 +14,6 @@
   --ui-accent: #2469d8;
   --ui-accent-soft: #eaf2ff;
   --ui-danger: #b83232;
-  --annotation-color: #2454b8;
   --annotation-draft-color: #b8562a;
 }
 
@@ -141,21 +140,25 @@ button:disabled:hover { border-color: var(--ui-border); }
 .point-selection-ring { fill: none; stroke: var(--ui-accent); stroke-width: 1.6px; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
 
 /* Shapes & arrows: fills/lines always render (see annotationRenderer.js);
-   only .annotation-vertex-handle circles are gated on selection. */
+   only .annotation-vertex-handle circles are gated on selection. Color
+   (fill/stroke) is deliberately NOT set here for the non-draft classes --
+   it's applied per-instance via presentation attributes in
+   annotationRenderer.js (each annotation's owning system has its own
+   probability color), and a CSS class rule would win over that inline
+   value if declared here. */
 .annotation-shape-fill {
-  fill: color-mix(in srgb, var(--annotation-color) 22%, transparent);
-  stroke: var(--annotation-color); stroke-width: 1.6px; vector-effect: non-scaling-stroke; cursor: pointer;
+  stroke-width: 1.6px; vector-effect: non-scaling-stroke; cursor: pointer;
 }
 .annotation-shape-preview {
-  fill: none; stroke: var(--annotation-color); stroke-width: 1.6px; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; cursor: pointer;
+  fill: none; stroke-width: 1.6px; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; cursor: pointer;
 }
 .annotation-arrow-line {
-  fill: none; stroke: var(--annotation-color); stroke-width: 2.2px; stroke-linecap: round; vector-effect: non-scaling-stroke;
+  fill: none; stroke-width: 2.2px; stroke-linecap: round; vector-effect: non-scaling-stroke;
 }
 .annotation-arrow-hit {
   fill: none; stroke: transparent; stroke-width: 14px; vector-effect: non-scaling-stroke; cursor: pointer;
 }
-.annotation-arrowhead { fill: var(--annotation-color); stroke: none; }
+.annotation-arrowhead { stroke: none; }
 
 .annotation-draft-shape-fill {
   fill: color-mix(in srgb, var(--annotation-draft-color) 18%, transparent);
@@ -171,7 +174,7 @@ button:disabled:hover { border-color: var(--ui-border); }
 .annotation-draft-arrowhead { fill: var(--annotation-draft-color); stroke: none; }
 
 .annotation-vertex-handle {
-  fill: #fff; stroke: var(--annotation-color); stroke-width: 1.8px; vector-effect: non-scaling-stroke; cursor: grab;
+  fill: #fff; stroke-width: 1.8px; vector-effect: non-scaling-stroke; cursor: grab;
 }
 .annotation-draft-handle { stroke: var(--annotation-draft-color); }
 .annotation-draft-handle--origin { fill: var(--annotation-draft-color); }

@@ -1,6 +1,13 @@
 import { smoothPath, smoothClosedPath } from './smoothPath.js';
+import { PROBABILITY_COLORS, systemColor } from './constants.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 function el(name, attrs = {}) {
   const node = document.createElementNS(SVG_NS, name);
@@ -40,7 +47,15 @@ function arrowheadPoints(tip, prev, size) {
 // Draws the finished (or in-progress "draft") portion of one shape/arrow --
 // the smoothed fill/line path, plus an arrowhead for arrows. Never draws
 // vertex handles; that's the caller's job, gated on selection.
-function appendFill(layer, { points, type, cssPrefix, dataAttrs, unit, samplesPerSegment = 16 }) {
+//
+// `color`, when given, is the owning system's probability color: it's
+// applied via presentation attributes (not a CSS class) so each annotation
+// can have its own color. The non-draft CSS classes deliberately omit
+// fill/stroke so these inline values always win -- a CSS class rule would
+// otherwise override an element's own presentation attribute. Draft
+// annotations (color undefined) keep their fixed CSS-driven color, which
+// stays visually distinct from any system's real color while drawing.
+function appendFill(layer, { points, type, cssPrefix, dataAttrs, unit, color, samplesPerSegment = 16 }) {
   if (points.length < 2) return; // nothing to draw yet (a draft with just one point placed)
 
   if (type === 'shape') {
@@ -50,11 +65,15 @@ function appendFill(layer, { points, type, cssPrefix, dataAttrs, unit, samplesPe
       // CSS class (not just an inline fill override) since a CSS class rule
       // always wins over an element's own presentation attribute.
       const smoothed = smoothPath(points, samplesPerSegment);
-      layer.append(el('path', { class: `${cssPrefix}-shape-preview`, d: openPathD(smoothed), ...dataAttrs }));
+      const attrs = { class: `${cssPrefix}-shape-preview`, d: openPathD(smoothed), ...dataAttrs };
+      if (color) attrs.stroke = color;
+      layer.append(el('path', attrs));
       return;
     }
     const smoothed = smoothClosedPath(points, samplesPerSegment);
-    layer.append(el('path', { class: `${cssPrefix}-shape-fill`, d: closedPathD(smoothed), ...dataAttrs }));
+    const attrs = { class: `${cssPrefix}-shape-fill`, d: closedPathD(smoothed), ...dataAttrs };
+    if (color) { attrs.fill = hexToRgba(color, 0.22); attrs.stroke = color; }
+    layer.append(el('path', attrs));
     return;
   }
 
@@ -62,23 +81,29 @@ function appendFill(layer, { points, type, cssPrefix, dataAttrs, unit, samplesPe
   const smoothed = smoothPath(points, samplesPerSegment);
   const d = openPathD(smoothed);
   layer.append(el('path', { class: `${cssPrefix}-arrow-hit`, d, ...dataAttrs }));
-  layer.append(el('path', { class: `${cssPrefix}-arrow-line`, d, ...dataAttrs }));
+  const lineAttrs = { class: `${cssPrefix}-arrow-line`, d, ...dataAttrs };
+  if (color) lineAttrs.stroke = color;
+  layer.append(el('path', lineAttrs));
   const tip = smoothed[smoothed.length - 1];
   const prev = smoothed[Math.max(0, smoothed.length - 2)];
   const head = arrowheadPoints(tip, prev, unit * 10);
-  layer.append(el('polygon', { class: `${cssPrefix}-arrowhead`, points: head.map(token).join(' '), ...dataAttrs }));
+  const headAttrs = { class: `${cssPrefix}-arrowhead`, points: head.map(token).join(' '), ...dataAttrs };
+  if (color) headAttrs.fill = color;
+  layer.append(el('polygon', headAttrs));
 }
 
-function appendHandles(layer, { id, points, unit }) {
+function appendHandles(layer, { id, points, unit, color }) {
   const r = unit * 6;
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
-    layer.append(el('circle', {
+    const attrs = {
       class: 'annotation-vertex-handle',
       'data-annotation-id': id,
       'data-vertex-index': i,
       cx: p.lon, cy: -p.lat, r,
-    }));
+    };
+    if (color) attrs.stroke = color;
+    layer.append(el('circle', attrs));
   }
 }
 
@@ -87,18 +112,21 @@ export function createAnnotationRenderer(svg) {
   const handleLayer = el('g', { id: 'annotation-handle-layer' });
   svg.append(fillLayer, handleLayer);
 
-  function render({ annotations, selectedAnnotationId, draft, bounds, width, height }) {
+  function render({ annotations, selectedAnnotationId, draft, systems, bounds, width, height }) {
     fillLayer.replaceChildren();
     handleLayer.replaceChildren();
     const unit = screenUnit(bounds, width, height);
+    const systemsById = new Map((systems ?? []).map((s) => [s.id, s]));
 
     for (const ann of annotations) {
+      const owner = systemsById.get(ann.systemId);
+      const color = owner ? systemColor(owner) : PROBABILITY_COLORS.none;
       appendFill(fillLayer, {
-        points: ann.points, type: ann.type, cssPrefix: 'annotation', unit,
+        points: ann.points, type: ann.type, cssPrefix: 'annotation', unit, color,
         dataAttrs: { 'data-annotation-id': ann.id },
       });
       if (ann.id !== selectedAnnotationId) continue; // fill above always renders; only handles are gated
-      appendHandles(handleLayer, { id: ann.id, points: ann.points, unit });
+      appendHandles(handleLayer, { id: ann.id, points: ann.points, unit, color });
     }
 
     if (draft) {

@@ -82,12 +82,14 @@ where a "system" starts life as a **Disturbance** — a probability-colored
 X you place on the map — and will progress through Invest → ETD → named
 ETS → Category 1-5 as later milestones add the rest of the lifecycle.
 
-Disturbances (place, drag, edit formation probability/pressure/wind) and
-per-system shapes/arrows (freeform smoothed shape and arrow annotations,
-each owned by a system, editable vertex-by-vertex, always visible when
-their system isn't selected) are both in place now. No cone, the
-Invest/ETD/ETS promotion ladder, watches/warnings, or auth yet — those
-land in later milestones on top of this same foundation.
+Disturbances (place, drag, edit 2/5/10-day formation probability, pressure,
+and wind) and per-system shapes/arrows (freeform smoothed shape and arrow
+annotations, each owned by a system, editable vertex-by-vertex, always
+visible when their system isn't selected) are both in place now. A
+system's marker, sidebar dot, and every shape/arrow it owns all share one
+color, driven by whichever of its three probability windows is currently
+highest. No cone, the Invest/ETD/ETS promotion ladder, watches/warnings, or
+auth yet — those land in later milestones on top of this same foundation.
 
 To run it:
 

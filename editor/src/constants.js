@@ -23,3 +23,18 @@ export function probabilityTier(pct) {
   if (pct <= 60) return 'medium';
   return 'high';
 }
+
+// A system tracks three formation-probability windows (2/5/10-day); the
+// color-driving figure is whichever window is currently highest.
+export function maxFormationProbabilityPct(system) {
+  const vals = [
+    system.formationProbability2dayPct,
+    system.formationProbability5dayPct,
+    system.formationProbability10dayPct,
+  ].filter((v) => typeof v === 'number');
+  return vals.length ? Math.max(...vals) : null;
+}
+
+export function systemColor(system) {
+  return PROBABILITY_COLORS[probabilityTier(maxFormationProbabilityPct(system))];
+}

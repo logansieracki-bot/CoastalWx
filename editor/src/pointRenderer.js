@@ -1,4 +1,4 @@
-import { PROBABILITY_COLORS, probabilityTier } from './constants.js';
+import { systemColor } from './constants.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -30,7 +30,7 @@ export function createPointRenderer(svg) {
 
     for (const system of systems) {
       const isSelected = system.id === selectedId;
-      const color = PROBABILITY_COLORS[probabilityTier(system.formationProbabilityPct)];
+      const color = systemColor(system);
 
       const group = el('g', {
         class: `system-point${isSelected ? ' selected' : ''}`,

@@ -86,7 +86,9 @@ function toApi(row) {
     name: row.name ?? null,
     lat: row.lat,
     lon: row.lon,
-    formationProbabilityPct: row.formationProbabilityPct ?? null,
+    formationProbability2dayPct: row.formationProbability2dayPct ?? null,
+    formationProbability5dayPct: row.formationProbability5dayPct ?? null,
+    formationProbability10dayPct: row.formationProbability10dayPct ?? null,
     pressureMb: row.pressureMb ?? null,
     windMph: row.windMph ?? null,
     formed: !!row.formed,
@@ -100,14 +102,17 @@ const local = {
   async listSystems() {
     return readAll().sort((a, b) => b.season - a.season || a.sequenceNumber - b.sequenceNumber).map(toApi);
   },
-  async createSystem({ lat, lon, formationProbabilityPct }) {
+  async createSystem({ lat, lon, formationProbability2dayPct, formationProbability5dayPct, formationProbability10dayPct }) {
     const rows = readAll();
     const season = currentSeason();
     const sequenceNumber = Math.max(0, ...rows.filter((r) => r.season === season).map((r) => r.sequenceNumber)) + 1;
     const now = new Date().toISOString();
     const row = {
       id: crypto.randomUUID(), season, sequenceNumber, name: null,
-      lat, lon, formationProbabilityPct: formationProbabilityPct ?? null,
+      lat, lon,
+      formationProbability2dayPct: formationProbability2dayPct ?? null,
+      formationProbability5dayPct: formationProbability5dayPct ?? null,
+      formationProbability10dayPct: formationProbability10dayPct ?? null,
       pressureMb: null, windMph: null, formed: false, classified: false,
       createdAt: now, updatedAt: now,
     };

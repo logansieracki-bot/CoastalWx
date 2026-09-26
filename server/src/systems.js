@@ -24,7 +24,9 @@ function toApi(row) {
     name: row.name,
     lat: row.lat,
     lon: row.lon,
-    formationProbabilityPct: row.formation_probability_pct,
+    formationProbability2dayPct: row.formation_probability_2day_pct,
+    formationProbability5dayPct: row.formation_probability_5day_pct,
+    formationProbability10dayPct: row.formation_probability_10day_pct,
     pressureMb: row.pressure_mb,
     windMph: row.wind_mph,
     formed: !!row.formed,
@@ -48,7 +50,7 @@ systemsRouter.get('/systems/:id', (req, res) => {
 });
 
 systemsRouter.post('/systems', (req, res) => {
-  const { lat, lon, formationProbabilityPct } = req.body ?? {};
+  const { lat, lon, formationProbability2dayPct, formationProbability5dayPct, formationProbability10dayPct } = req.body ?? {};
   if (typeof lat !== 'number' || typeof lon !== 'number') {
     return res.status(400).json({ error: 'lat and lon are required numbers' });
   }
@@ -58,9 +60,9 @@ systemsRouter.post('/systems', (req, res) => {
   const now = new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO systems (id, season, sequence_number, lat, lon, formation_probability_pct, formed, classified, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
-  `).run(id, season, sequenceNumber, lat, lon, formationProbabilityPct ?? null, now, now);
+    INSERT INTO systems (id, season, sequence_number, lat, lon, formation_probability_2day_pct, formation_probability_5day_pct, formation_probability_10day_pct, formed, classified, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+  `).run(id, season, sequenceNumber, lat, lon, formationProbability2dayPct ?? null, formationProbability5dayPct ?? null, formationProbability10dayPct ?? null, now, now);
 
   const row = db.prepare('SELECT * FROM systems WHERE id = ?').get(id);
   res.status(201).json(toApi(row));
@@ -69,7 +71,9 @@ systemsRouter.post('/systems', (req, res) => {
 const PATCHABLE_FIELDS = {
   lat: 'lat',
   lon: 'lon',
-  formationProbabilityPct: 'formation_probability_pct',
+  formationProbability2dayPct: 'formation_probability_2day_pct',
+  formationProbability5dayPct: 'formation_probability_5day_pct',
+  formationProbability10dayPct: 'formation_probability_10day_pct',
   pressureMb: 'pressure_mb',
   windMph: 'wind_mph',
   formed: 'formed',

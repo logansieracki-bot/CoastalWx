@@ -1,4 +1,4 @@
-import { INITIAL_BOUNDS, PROBABILITY_COLORS, probabilityTier } from './constants.js';
+import { INITIAL_BOUNDS, maxFormationProbabilityPct, systemColor } from './constants.js';
 import { createViewState, getAspectFittedBounds, resetView } from './viewState.js';
 import { attachNavigation } from './navigation.js';
 import { createMapRenderer } from './mapRenderer.js';
@@ -54,7 +54,7 @@ function renderMap() {
   const rect = svg.getBoundingClientRect();
   const bounds = currentBounds();
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
-  annotationRenderer.render({ annotations, selectedAnnotationId, draft: drawingSession, bounds, width: rect.width, height: rect.height });
+  annotationRenderer.render({ annotations, selectedAnnotationId, draft: drawingSession, systems, bounds, width: rect.width, height: rect.height });
   pointRenderer.render({ systems, selectedId, bounds, width: rect.width, height: rect.height });
 }
 
@@ -121,15 +121,16 @@ function renderSystemsList() {
 
     const dot = document.createElement('span');
     dot.className = 'tier-dot';
-    dot.style.background = PROBABILITY_COLORS[probabilityTier(system.formationProbabilityPct)];
+    dot.style.background = systemColor(system);
 
     const name = document.createElement('span');
     name.className = 'systems-list__name';
     name.textContent = system.displayName;
 
+    const maxPct = maxFormationProbabilityPct(system);
     const pct = document.createElement('span');
     pct.className = 'systems-list__pct';
-    pct.textContent = system.formationProbabilityPct != null ? `${system.formationProbabilityPct}%` : '—';
+    pct.textContent = maxPct != null ? `${maxPct}%` : '—';
 
     li.append(dot, name, pct);
     li.addEventListener('click', () => select(system.id));
@@ -219,12 +220,19 @@ function renderSelectedPanel() {
   meta.textContent = `${system.seasonLabel} season · ${system.lat.toFixed(2)}°N, ${Math.abs(system.lon).toFixed(2)}°W`;
   selectedPanelEl.append(meta);
 
-  const probInput = document.createElement('input');
-  probInput.type = 'number';
-  probInput.min = '0';
-  probInput.max = '100';
-  probInput.value = system.formationProbabilityPct ?? '';
-  probInput.placeholder = '0-100';
+  function probabilityInput(value) {
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.max = '100';
+    input.value = value ?? '';
+    input.placeholder = '0-100';
+    return input;
+  }
+
+  const prob2Input = probabilityInput(system.formationProbability2dayPct);
+  const prob5Input = probabilityInput(system.formationProbability5dayPct);
+  const prob10Input = probabilityInput(system.formationProbability10dayPct);
 
   const pressureInput = document.createElement('input');
   pressureInput.type = 'number';
@@ -241,7 +249,9 @@ function renderSelectedPanel() {
   const form = document.createElement('div');
   form.className = 'selected-form';
   form.append(
-    field('Formation probability (%)', probInput),
+    field('2-day formation probability (%)', prob2Input),
+    field('5-day formation probability (%)', prob5Input),
+    field('10-day formation probability (%)', prob10Input),
     field('Central pressure (mb)', pressureInput),
     field('Sustained wind (mph)', windInput)
   );
@@ -255,7 +265,9 @@ function renderSelectedPanel() {
   saveBtn.className = 'primary';
   saveBtn.addEventListener('click', async () => {
     const updated = await api.updateSystem(system.id, {
-      formationProbabilityPct: probInput.value === '' ? null : Number(probInput.value),
+      formationProbability2dayPct: prob2Input.value === '' ? null : Number(prob2Input.value),
+      formationProbability5dayPct: prob5Input.value === '' ? null : Number(prob5Input.value),
+      formationProbability10dayPct: prob10Input.value === '' ? null : Number(prob10Input.value),
       pressureMb: pressureInput.value === '' ? null : Number(pressureInput.value),
       windMph: windInput.value === '' ? null : Number(windInput.value),
     });
@@ -287,7 +299,12 @@ function renderSidebar() {
 }
 
 async function placeDisturbance(geo) {
-  const created = await api.createSystem({ lat: geo.lat, lon: geo.lon, formationProbabilityPct: 0 });
+  const created = await api.createSystem({
+    lat: geo.lat, lon: geo.lon,
+    formationProbability2dayPct: 0,
+    formationProbability5dayPct: 0,
+    formationProbability10dayPct: 0,
+  });
   systems = [...systems, created];
   setTool('select');
   select(created.id);
