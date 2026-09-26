@@ -96,6 +96,8 @@ function toApi(row) {
     formationProbability10dayPct: row.formationProbability10dayPct ?? null,
     pressureMb: row.pressureMb ?? null,
     windMph: row.windMph ?? null,
+    gustMph: row.gustMph ?? null,
+    galeRadiusMi: row.galeRadiusMi ?? null,
     formed: !!row.formed,
     classified: !!row.classified,
     createdAt: row.createdAt,
@@ -119,7 +121,8 @@ const local = {
       formationProbability2dayPct: formationProbability2dayPct ?? null,
       formationProbability5dayPct: formationProbability5dayPct ?? null,
       formationProbability10dayPct: formationProbability10dayPct ?? null,
-      pressureMb: null, windMph: null, formed: false, classified: false,
+      pressureMb: null, windMph: null, gustMph: null, galeRadiusMi: null,
+      formed: false, classified: false,
       createdAt: now, updatedAt: now,
     };
     writeAll([...rows, row]);

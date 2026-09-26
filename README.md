@@ -79,19 +79,29 @@ on sample data. `/editor` and `/server` are the start of the actual
 forecaster tool that will publish to it: a pannable/zoomable map (top
 toolbar, left data panel, map filling the rest) backed by a real database,
 where a "system" starts life as a **Disturbance** — a probability-colored
-X you place on the map — and will progress through Invest → ETD → named
-ETS → Category 1-5 as later milestones add the rest of the lifecycle.
+X you place on the map — and progresses through Invest → Formed →
+Classified (with an intensity category) as later milestones add the rest
+of the lifecycle.
 
 Disturbances (place, drag, edit 2/5/10-day formation probability, pressure,
 and wind) and per-system shapes/arrows (freeform smoothed shape and arrow
 annotations, each owned by a system, editable vertex-by-vertex, always
 visible when their system isn't selected) are both in place now. A
+Disturbance can be promoted to an Invest (Investigate button, with a
+confirmation), toggled Formed/Not Formed (whether it currently has a
+physically-existing closed circulation), and — once investigated, formed,
+and given wind/gust/gale-radius/pressure readings — Classified as an
+extratropical cyclone. Classifying computes an intensity category from a
+calculated score (not wind speed alone, since these storms' impact depends
+heavily on how large they are), via a live built-in calculator right on the
+selected-system panel; an in-app reference explains the formula and the
+criteria for what counts as a trackable extratropical cyclone at all. A
 system's marker, sidebar dot, and every shape/arrow it owns all share one
-color, driven by whichever of its three probability windows is currently
-highest. A Disturbance can be promoted to an Invest (Investigate button on
-the selected-system panel, with a confirmation) -- the rest of the
-ETD/ETS/Category promotion ladder, a cone, watches/warnings, and auth are
-still later milestones on top of this same foundation.
+color — the intensity category color once classified, otherwise whichever
+of its three probability windows is currently highest. Advisories,
+downgrading, and the rest of the full classification workflow, a cone,
+watches/warnings, and auth are still later milestones on top of this same
+foundation.
 
 To run it:
 

@@ -1,4 +1,7 @@
-import { INITIAL_BOUNDS, maxFormationProbabilityPct, systemColor } from './constants.js';
+import {
+  INITIAL_BOUNDS, maxFormationProbabilityPct, systemColor, displayLabel,
+  intensityScore, intensityCategoryKey, CATEGORY_INFO,
+} from './constants.js';
 import { createViewState, getAspectFittedBounds, resetView } from './viewState.js';
 import { attachNavigation } from './navigation.js';
 import { createMapRenderer } from './mapRenderer.js';
@@ -125,12 +128,17 @@ function renderSystemsList() {
 
     const name = document.createElement('span');
     name.className = 'systems-list__name';
-    name.textContent = system.displayName;
+    name.textContent = displayLabel(system);
 
-    const maxPct = maxFormationProbabilityPct(system);
     const pct = document.createElement('span');
     pct.className = 'systems-list__pct';
-    pct.textContent = maxPct != null ? `${maxPct}%` : '—';
+    if (system.classified) {
+      const score = intensityScore(system);
+      pct.textContent = score != null ? score.toFixed(1) : '—';
+    } else {
+      const maxPct = maxFormationProbabilityPct(system);
+      pct.textContent = maxPct != null ? `${maxPct}%` : '—';
+    }
 
     li.append(dot, name, pct);
     li.addEventListener('click', () => select(system.id));
@@ -204,6 +212,89 @@ function renderAnnotationsSection(system) {
   selectedPanelEl.append(panel);
 }
 
+// Live intensity score/category, computed from the form's current (maybe
+// unsaved) wind/gust/radius/pressure values -- this is the "calculator":
+// it updates as you type, before Save is ever clicked. Classify itself
+// still acts on the saved system record, same as Investigate/Delete.
+function renderIntensitySection(system, { windInput, gustInput, radiusInput, pressureInput }) {
+  const wrap = document.createElement('div');
+  wrap.className = 'annotations-section intensity-section';
+  const heading = document.createElement('h4');
+  heading.textContent = 'Intensity & classification';
+  wrap.append(heading);
+
+  const readout = document.createElement('p');
+  readout.className = 'intensity-readout';
+  function updateReadout() {
+    const live = {
+      windMph: windInput.value === '' ? null : Number(windInput.value),
+      gustMph: gustInput.value === '' ? null : Number(gustInput.value),
+      galeRadiusMi: radiusInput.value === '' ? null : Number(radiusInput.value),
+      pressureMb: pressureInput.value === '' ? null : Number(pressureInput.value),
+    };
+    const score = intensityScore(live);
+    if (score == null) {
+      readout.textContent = 'Enter wind, gust, radius, and pressure to calculate.';
+    } else {
+      const key = intensityCategoryKey(score);
+      readout.textContent = `Score ${score.toFixed(1)} → ${CATEGORY_INFO[key].label}`;
+    }
+  }
+  for (const input of [windInput, gustInput, radiusInput, pressureInput]) {
+    input.addEventListener('input', updateReadout);
+  }
+  updateReadout();
+  wrap.append(readout);
+
+  const details = document.createElement('details');
+  details.className = 'intensity-reference';
+  const summary = document.createElement('summary');
+  summary.textContent = 'How is this calculated?';
+  details.append(summary);
+  const refBody = document.createElement('div');
+  refBody.innerHTML = `
+    <p><strong>Counts as an extratropical cyclone once it:</strong></p>
+    <ul>
+      <li>Has a closed circulation that has persisted 12+ hours</li>
+      <li>Shows extratropical structure (temperature contrast, usually attached fronts)</li>
+      <li>Produces gale-force sustained winds (39 mph+) somewhere in its circulation</li>
+      <li>Has a central pressure roughly 8 mb+ below its surroundings</li>
+    </ul>
+    <p><strong>Score</strong> = [(wind − 35) + 0.25 × (gust − 40)] × √(radius ÷ 300) + 0.5 × (1010 − pressure)</p>
+    <ul>
+      <li>Under 20: Extratropical Depression</li>
+      <li>20–39: Category 1</li>
+      <li>40–64: Category 2</li>
+      <li>65–99: Category 3</li>
+      <li>100–149: Category 4</li>
+      <li>150+: Category 5</li>
+    </ul>
+  `;
+  details.append(refBody);
+  wrap.append(details);
+
+  if (!system.classified) {
+    const canClassify = system.stage === 'invest' && system.formed &&
+      system.windMph != null && system.gustMph != null &&
+      system.galeRadiusMi != null && system.pressureMb != null;
+    const classifyBtn = document.createElement('button');
+    classifyBtn.textContent = 'Classify';
+    classifyBtn.disabled = !canClassify;
+    classifyBtn.title = canClassify ? '' : 'Investigate it, mark it Formed, and save wind/gust/radius/pressure first.';
+    classifyBtn.addEventListener('click', async () => {
+      const key = intensityCategoryKey(intensityScore(system));
+      const label = key ? CATEGORY_INFO[key].label : 'a category';
+      if (!confirm(`Classify ${displayLabel(system)} as an extratropical cyclone (${label})? Confirm it has a closed circulation (12+ hrs), extratropical structure, gale-force winds, and a meaningful pressure gradient below its surroundings. This cannot be undone.`)) return;
+      const updated = await api.updateSystem(system.id, { classified: true });
+      systems = systems.map((s) => (s.id === updated.id ? updated : s));
+      select(updated.id);
+    });
+    wrap.append(classifyBtn);
+  }
+
+  selectedPanelEl.append(wrap);
+}
+
 function renderSelectedPanel() {
   const system = systems.find((s) => s.id === selectedId);
   selectedPanelEl.replaceChildren();
@@ -212,13 +303,25 @@ function renderSelectedPanel() {
   if (!system) return;
 
   const title = document.createElement('h3');
-  title.textContent = system.displayName;
+  title.textContent = displayLabel(system);
   selectedPanelEl.append(title);
 
   const meta = document.createElement('div');
   meta.className = 'selected-meta';
   meta.textContent = `${system.seasonLabel} season · ${system.lat.toFixed(2)}°N, ${Math.abs(system.lon).toFixed(2)}°W`;
   selectedPanelEl.append(meta);
+
+  const formedBtn = document.createElement('button');
+  formedBtn.className = `formed-toggle${system.formed ? ' is-active' : ''}`;
+  formedBtn.textContent = system.formed ? 'Formed' : 'Not Formed';
+  formedBtn.title = 'Has a closed circulation physically formed? Click to toggle.';
+  formedBtn.addEventListener('click', async () => {
+    const updated = await api.updateSystem(system.id, { formed: !system.formed });
+    systems = systems.map((s) => (s.id === updated.id ? updated : s));
+    renderSidebar();
+    renderMap();
+  });
+  selectedPanelEl.append(formedBtn);
 
   function probabilityInput(value) {
     const input = document.createElement('input');
@@ -246,6 +349,18 @@ function renderSelectedPanel() {
   windInput.value = system.windMph ?? '';
   windInput.placeholder = 'mph';
 
+  const gustInput = document.createElement('input');
+  gustInput.type = 'number';
+  gustInput.step = '1';
+  gustInput.value = system.gustMph ?? '';
+  gustInput.placeholder = 'mph';
+
+  const radiusInput = document.createElement('input');
+  radiusInput.type = 'number';
+  radiusInput.step = '1';
+  radiusInput.value = system.galeRadiusMi ?? '';
+  radiusInput.placeholder = 'miles';
+
   const form = document.createElement('div');
   form.className = 'selected-form';
   form.append(
@@ -253,7 +368,9 @@ function renderSelectedPanel() {
     field('5-day formation probability (%)', prob5Input),
     field('10-day formation probability (%)', prob10Input),
     field('Central pressure (mb)', pressureInput),
-    field('Sustained wind (mph)', windInput)
+    field('Sustained wind (mph)', windInput),
+    field('Max gust (mph)', gustInput),
+    field('Radius of gale-force winds (mi)', radiusInput)
   );
   selectedPanelEl.append(form);
 
@@ -270,6 +387,8 @@ function renderSelectedPanel() {
       formationProbability10dayPct: prob10Input.value === '' ? null : Number(prob10Input.value),
       pressureMb: pressureInput.value === '' ? null : Number(pressureInput.value),
       windMph: windInput.value === '' ? null : Number(windInput.value),
+      gustMph: gustInput.value === '' ? null : Number(gustInput.value),
+      galeRadiusMi: radiusInput.value === '' ? null : Number(radiusInput.value),
     });
     systems = systems.map((s) => (s.id === updated.id ? updated : s));
     renderSidebar();
@@ -304,6 +423,7 @@ function renderSelectedPanel() {
   actions.append(deleteBtn);
   selectedPanelEl.append(actions);
 
+  renderIntensitySection(system, { windInput, gustInput, radiusInput, pressureInput });
   renderAnnotationsSection(system);
 }
 

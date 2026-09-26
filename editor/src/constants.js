@@ -35,6 +35,59 @@ export function maxFormationProbabilityPct(system) {
   return vals.length ? Math.max(...vals) : null;
 }
 
+// Intensity category scale for classified extratropical cyclones -- a
+// calculated score (wind + gust + size + pressure) rather than wind alone,
+// since these storms' impact depends heavily on how much area they cover.
+// Ascending severity, deliberately a different hue family than
+// PROBABILITY_COLORS so a classified system's color reads as a distinct
+// scale, not a continuation of "formation probability."
+export const CATEGORY_INFO = {
+  ed: { label: 'Extratropical Depression', color: '#6b8e4e' },
+  cat1: { label: 'Category 1', color: '#c9a227' },
+  cat2: { label: 'Category 2', color: '#d97f2c' },
+  cat3: { label: 'Category 3', color: '#c1442c' },
+  cat4: { label: 'Category 4', color: '#9c2b4e' },
+  cat5: { label: 'Category 5', color: '#5c2160' },
+};
+
+// Score = [(V-35) + 0.25*(G-40)] * sqrt(R/300) + 0.5*(1010-p)
+// V=sustained wind mph, G=max gust mph, R=gale-radius miles, p=central mb.
+// Gust and pressure points are floored at 0 (a weak gust or high pressure
+// shouldn't SUBTRACT from the score); wind points are not floored, matching
+// the source formula's own worked steps.
+export function intensityScore({ windMph, gustMph, galeRadiusMi, pressureMb }) {
+  if ([windMph, gustMph, galeRadiusMi, pressureMb].some((v) => typeof v !== 'number')) return null;
+  const windPoints = windMph - 35;
+  const gustPoints = Math.max(0, 0.25 * (gustMph - 40));
+  const sizeFactor = Math.sqrt(galeRadiusMi / 300);
+  const pressurePoints = Math.max(0, 0.5 * (1010 - pressureMb));
+  return (windPoints + gustPoints) * sizeFactor + pressurePoints;
+}
+
+export function intensityCategoryKey(score) {
+  if (typeof score !== 'number') return null;
+  if (score < 20) return 'ed';
+  if (score < 40) return 'cat1';
+  if (score < 65) return 'cat2';
+  if (score < 100) return 'cat3';
+  if (score < 150) return 'cat4';
+  return 'cat5';
+}
+
+// The name/stage-based label until a system is classified, then its own
+// name if set, else the category label ("Category 3").
+export function displayLabel(system) {
+  if (system.classified) {
+    const key = intensityCategoryKey(intensityScore(system));
+    if (key) return system.name || CATEGORY_INFO[key].label;
+  }
+  return system.displayName;
+}
+
 export function systemColor(system) {
+  if (system.classified) {
+    const key = intensityCategoryKey(intensityScore(system));
+    if (key) return CATEGORY_INFO[key].color;
+  }
   return PROBABILITY_COLORS[probabilityTier(maxFormationProbabilityPct(system))];
 }

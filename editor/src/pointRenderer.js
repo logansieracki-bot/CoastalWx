@@ -1,4 +1,4 @@
-import { systemColor } from './constants.js';
+import { systemColor, displayLabel } from './constants.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -61,7 +61,7 @@ export function createPointRenderer(svg) {
         'font-size': labelFont,
         'text-anchor': 'middle'
       });
-      label.textContent = system.displayName;
+      label.textContent = displayLabel(system);
       group.append(label);
 
       layer.append(group);

@@ -27,6 +27,8 @@ db.exec(`
     formation_probability_10day_pct INTEGER,
     pressure_mb REAL,
     wind_mph REAL,
+    gust_mph REAL,
+    gale_radius_mi REAL,
     formed INTEGER NOT NULL DEFAULT 0,
     classified INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
