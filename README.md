@@ -53,6 +53,16 @@ geographic data files, so the page stays a single dependency-free file. The
 lon/lat → pixel projection is a small function in the script, so real
 coordinates just work.
 
+## Deployment
+
+`index.html` (the public page) auto-deploys to GitHub Pages via
+`.github/workflows/deploy-pages.yml` on every push to this branch. It stages
+just `index.html` into `_site/` and publishes that -- `/editor` and
+`/server` are deliberately left out, since Pages can't run the backend they
+need. One manual, one-time step this repo needs (not something the workflow
+can do on its own): in **Settings -> Pages -> Build and deployment**, set
+**Source** to **GitHub Actions**.
+
 ## The editor (`/editor` + `/server`)
 
 `index.html` at the repo root is the public-facing page above, still running
