@@ -43,6 +43,7 @@ export function maxFormationProbabilityPct(system) {
 // scale, not a continuation of "formation probability."
 export const CATEGORY_INFO = {
   ed: { label: 'Extratropical Depression', color: '#6b8e4e' },
+  ets: { label: 'Extratropical Storm', color: '#a4a832' },
   cat1: { label: 'Category 1', color: '#c9a227' },
   cat2: { label: 'Category 2', color: '#d97f2c' },
   cat3: { label: 'Category 3', color: '#c1442c' },
@@ -52,12 +53,11 @@ export const CATEGORY_INFO = {
 
 // Score = [(V-35) + 0.25*(G-40)] * sqrt(R/300) + 0.5*(1010-p)
 // V=sustained wind mph, G=max gust mph, R=gale-radius miles, p=central mb.
-// Gust and pressure points are floored at 0 (a weak gust or high pressure
-// shouldn't SUBTRACT from the score); wind points are not floored, matching
-// the source formula's own worked steps.
+// Wind, gust, and pressure points are all floored at 0 -- a weak wind, weak
+// gust, or high pressure contributes nothing rather than subtracting.
 export function intensityScore({ windMph, gustMph, galeRadiusMi, pressureMb }) {
   if ([windMph, gustMph, galeRadiusMi, pressureMb].some((v) => typeof v !== 'number')) return null;
-  const windPoints = windMph - 35;
+  const windPoints = Math.max(0, windMph - 35);
   const gustPoints = Math.max(0, 0.25 * (gustMph - 40));
   const sizeFactor = Math.sqrt(galeRadiusMi / 300);
   const pressurePoints = Math.max(0, 0.5 * (1010 - pressureMb));
@@ -66,7 +66,8 @@ export function intensityScore({ windMph, gustMph, galeRadiusMi, pressureMb }) {
 
 export function intensityCategoryKey(score) {
   if (typeof score !== 'number') return null;
-  if (score < 20) return 'ed';
+  if (score < 10) return 'ed';
+  if (score < 20) return 'ets';
   if (score < 40) return 'cat1';
   if (score < 65) return 'cat2';
   if (score < 100) return 'cat3';

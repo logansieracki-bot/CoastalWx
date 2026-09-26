@@ -262,7 +262,8 @@ function renderIntensitySection(system, { windInput, gustInput, radiusInput, pre
     </ul>
     <p><strong>Score</strong> = [(wind − 35) + 0.25 × (gust − 40)] × √(radius ÷ 300) + 0.5 × (1010 − pressure)</p>
     <ul>
-      <li>Under 20: Extratropical Depression</li>
+      <li>Under 10: Extratropical Depression</li>
+      <li>10–19: Extratropical Storm</li>
       <li>20–39: Category 1</li>
       <li>40–64: Category 2</li>
       <li>65–99: Category 3</li>
