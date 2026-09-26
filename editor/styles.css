@@ -4,8 +4,8 @@
   --land-color: #ecdfc2;
   --coast-stroke: #4a3a22;
   --border-stroke: #7a6a4a;
-  --state-stroke: #93805a;
-  --grid-stroke: rgba(74, 58, 34, 0.28);
+  --state-stroke: #7d6740;
+  --grid-stroke: rgba(74, 58, 34, 0.42);
   --ui-bg: #eef2f6;
   --ui-panel: #ffffff;
   --ui-border: #cbd5e1;
@@ -127,8 +127,8 @@ button.danger { color: var(--ui-danger); }
 .land { fill: var(--land-color); stroke: var(--coast-stroke); stroke-width: 1.4px; vector-effect: non-scaling-stroke; }
 .lake { fill: var(--water-color); stroke: var(--coast-stroke); stroke-width: 0.9px; vector-effect: non-scaling-stroke; }
 .country-borders { fill: none; stroke: var(--border-stroke); stroke-width: 1.1px; vector-effect: non-scaling-stroke; }
-.state-borders { fill: none; stroke: var(--state-stroke); stroke-width: 0.9px; vector-effect: non-scaling-stroke; }
-.grid-line { stroke: var(--grid-stroke); stroke-width: 0.06; vector-effect: non-scaling-stroke; }
+.state-borders { fill: none; stroke: var(--state-stroke); stroke-width: 1.2px; vector-effect: non-scaling-stroke; }
+.grid-line { stroke: var(--grid-stroke); stroke-width: 0.7px; vector-effect: non-scaling-stroke; }
 .grid-label { fill: rgba(20, 35, 55, 0.55); font-family: inherit; }
 
 .point-x-outline { stroke: #000; stroke-width: 7px; stroke-linecap: round; vector-effect: non-scaling-stroke; cursor: pointer; }
