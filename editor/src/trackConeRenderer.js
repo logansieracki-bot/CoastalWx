@@ -63,7 +63,8 @@ export function createTrackConeRenderer(svg) {
 
   const coneGroup = el('g', { id: 'cone-layer' });
   const trackGroup = el('g', { id: 'forecast-track-layer' });
-  layer.append(defs, coneGroup, trackGroup);
+  const pointsGroup = el('g', { id: 'forecast-point-markers' });
+  layer.append(defs, coneGroup, trackGroup, pointsGroup);
   svg.append(layer);
 
   function render({ points, bounds, width, height }) {
@@ -74,6 +75,7 @@ export function createTrackConeRenderer(svg) {
     earlyOutlineMask.replaceChildren();
     coneGroup.replaceChildren();
     trackGroup.replaceChildren();
+    pointsGroup.replaceChildren();
 
     if (!bounds || !points || points.length === 0) return;
 
@@ -116,6 +118,27 @@ export function createTrackConeRenderer(svg) {
 
     if (points.length >= 2) {
       trackGroup.append(el('path', { class: 'forecast-track', d: trackPathData(points, 36) }));
+    }
+
+    // The hour-0 "current" sample is skipped here -- it's already the
+    // system's own X marker (pointRenderer.js), so only forecast points
+    // proper get a dot + hour label.
+    for (const point of points) {
+      if (!(point.hour > 0)) continue;
+      const marker = el('g', { class: 'forecast-point-marker' });
+      marker.append(el('circle', {
+        class: 'forecast-point-core',
+        cx: point.lon, cy: -point.lat, r: unit * 7,
+      }));
+      const label = el('text', {
+        class: 'forecast-point-marker-label',
+        x: point.lon + unit * 11, y: -point.lat - unit * 12,
+        'text-anchor': 'start', 'dominant-baseline': 'central',
+        'font-size': unit * 11.5,
+      });
+      label.textContent = `${Math.round(point.hour)}h`;
+      marker.append(label);
+      pointsGroup.append(marker);
     }
   }
 

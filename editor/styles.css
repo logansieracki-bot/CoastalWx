@@ -206,6 +206,19 @@ button:disabled:hover { border-color: var(--ui-border); }
 .forecast-cone-outline-early { fill: rgba(255, 255, 255, .95); }
 .forecast-track { fill: none; stroke: #111820; stroke-width: 2.1px; vector-effect: non-scaling-stroke; }
 
+/* Forecast-point dot + hour label at each real forecast point (not the
+   synthetic hour-0 "current" sample -- that's the system's own X marker).
+   Named forecast-point-marker-label, distinct from the sidebar's own
+   .forecast-point-label (that's a <span> in the "Forecast track" list
+   row, not the on-map SVG text this draws). */
+.forecast-point-marker { pointer-events: none; }
+.forecast-point-core { fill: #050505; stroke: #050505; stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.forecast-point-marker-label {
+  fill: #111; font-weight: 800; font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  paint-order: stroke; stroke: rgba(255, 255, 255, .88); stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+
 .annotations-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--ui-border); }
 .annotations-section h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--ui-muted); }
 .selected-annotation-panel .empty-hint { margin: 0 0 10px; }

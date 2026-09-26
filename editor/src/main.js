@@ -17,6 +17,7 @@ const selectedPanelEl = document.getElementById('selected-panel');
 const emptyHintEl = document.getElementById('empty-hint');
 const toolButtons = document.querySelectorAll('[data-tool]');
 const drawToolButtons = document.querySelectorAll('[data-requires-selection]');
+const classifyToolButtons = document.querySelectorAll('[data-requires-classification]');
 const deselectBtn = document.getElementById('deselect-btn');
 const resetViewBtn = document.getElementById('reset-view-btn');
 const placementHint = document.getElementById('placement-hint');
@@ -62,7 +63,7 @@ function currentBounds() {
 // prepended ahead of the saved forecast points (ordered by sequence).
 function selectedSystemTrackPoints() {
   const system = systems.find((s) => s.id === selectedId);
-  if (!system) return [];
+  if (!system || !system.classified) return [];
   const own = forecastPoints
     .filter((p) => p.systemId === selectedId)
     .sort((a, b) => a.sequence - b.sequence)
@@ -70,12 +71,20 @@ function selectedSystemTrackPoints() {
   return [{ lon: system.lon, lat: system.lat, hour: 0, spread: 0 }, ...own];
 }
 
+// Shapes/arrows belonging to a classified system are hidden once
+// classified -- the forecast track/cone replaces them as that system's
+// visual representation (the underlying rows aren't deleted, just no
+// longer rendered or reachable from the toolbar).
+function visibleAnnotations() {
+  return annotations.filter((a) => !systems.find((s) => s.id === a.systemId)?.classified);
+}
+
 function renderMap() {
   const rect = svg.getBoundingClientRect();
   const bounds = currentBounds();
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
   trackConeRenderer.render({ points: selectedSystemTrackPoints(), bounds, width: rect.width, height: rect.height });
-  annotationRenderer.render({ annotations, selectedAnnotationId, draft: drawingSession, systems, bounds, width: rect.width, height: rect.height });
+  annotationRenderer.render({ annotations: visibleAnnotations(), selectedAnnotationId, draft: drawingSession, systems, bounds, width: rect.width, height: rect.height });
   pointRenderer.render({ systems, selectedId, bounds, width: rect.width, height: rect.height });
 }
 
@@ -96,8 +105,22 @@ function setTool(next) {
   renderMap();
 }
 
+// Shapes/arrows are a pre-classification sketching tool; once a system is
+// classified, the forecast track/cone takes over as its visual
+// representation, so Draw Shape/Arrow stop being available for it and
+// Add Forecast Point starts being available.
 function updateToolAvailability() {
-  for (const btn of drawToolButtons) btn.disabled = selectedId === null;
+  const system = systems.find((s) => s.id === selectedId);
+  for (const btn of drawToolButtons) {
+    btn.disabled = selectedId === null || !!system?.classified;
+    btn.title = selectedId === null
+      ? 'Select a system first'
+      : (system?.classified ? "Not available once classified -- use the forecast track instead" : '');
+  }
+  for (const btn of classifyToolButtons) {
+    btn.disabled = !system?.classified;
+    btn.title = system?.classified ? '' : 'Classify a system first';
+  }
 }
 
 // Selecting a system always drops any shape/arrow selection (one thing
@@ -106,7 +129,7 @@ function updateToolAvailability() {
 function select(systemId) {
   selectedId = systemId;
   selectedAnnotationId = null;
-  if (selectedId === null && (tool === 'shape' || tool === 'arrow')) {
+  if (selectedId === null && (tool === 'shape' || tool === 'arrow' || tool === 'add-forecast-point')) {
     setTool('select'); // can't stay in a tool with no owning system
   }
   updateToolAvailability();
@@ -489,6 +512,8 @@ function renderSelectedPanel() {
   if (system.stage !== 'invest') {
     investigateBtn = document.createElement('button');
     investigateBtn.textContent = 'Investigate';
+    investigateBtn.disabled = !system.formed;
+    investigateBtn.title = system.formed ? '' : 'Mark it Formed first.';
     investigateBtn.addEventListener('click', async () => {
       if (!confirm(`Investigate ${system.displayName}? It will become an Invest.`)) return;
       const updated = await api.updateSystem(system.id, { stage: 'invest' });
@@ -515,8 +540,11 @@ function renderSelectedPanel() {
   selectedPanelEl.append(actions);
 
   renderIntensitySection(system, { windInput, gustInput, radiusInput, pressureInput });
-  renderForecastTrackSection(system);
-  renderAnnotationsSection(system);
+  if (system.classified) {
+    renderForecastTrackSection(system);
+  } else {
+    renderAnnotationsSection(system);
+  }
 }
 
 function renderSidebar() {
@@ -544,7 +572,9 @@ async function placeForecastPoint(geo) {
     lon: geo.lon, lat: geo.lat, hour, spreadMi: defaultSpreadForHour(hour),
   });
   forecastPoints = [...forecastPoints, created];
-  setTool('select');
+  // Stays in this tool, unlike Create Disturbance -- a track needs several
+  // points placed in one sitting. Escape or picking another tool exits it,
+  // same as Draw Shape/Arrow.
   renderSidebar();
   renderMap();
 }
@@ -788,7 +818,7 @@ async function init() {
 
   window.addEventListener('resize', renderMap);
   window.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && (tool === 'shape' || tool === 'arrow')) setTool('select');
+    if (event.key === 'Escape' && (tool === 'shape' || tool === 'arrow' || tool === 'add-forecast-point')) setTool('select');
   });
 
   await detectBackend();
