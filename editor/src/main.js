@@ -276,6 +276,18 @@ function renderSelectedPanel() {
     renderMap();
   });
 
+  let investigateBtn = null;
+  if (system.stage !== 'invest') {
+    investigateBtn = document.createElement('button');
+    investigateBtn.textContent = 'Investigate';
+    investigateBtn.addEventListener('click', async () => {
+      if (!confirm(`Investigate ${system.displayName}? It will become an Invest.`)) return;
+      const updated = await api.updateSystem(system.id, { stage: 'invest' });
+      systems = systems.map((s) => (s.id === updated.id ? updated : s));
+      select(updated.id);
+    });
+  }
+
   const deleteBtn = document.createElement('button');
   deleteBtn.textContent = 'Delete';
   deleteBtn.className = 'danger';
@@ -287,7 +299,9 @@ function renderSelectedPanel() {
     select(null);
   });
 
-  actions.append(saveBtn, deleteBtn);
+  actions.append(saveBtn);
+  if (investigateBtn) actions.append(investigateBtn);
+  actions.append(deleteBtn);
   selectedPanelEl.append(actions);
 
   renderAnnotationsSection(system);

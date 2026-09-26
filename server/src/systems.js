@@ -14,14 +14,19 @@ function nextSequenceNumber(season) {
   return (row.maxSeq ?? 0) + 1;
 }
 
+function stageLabel(stage) {
+  return stage === 'invest' ? 'Invest' : 'Disturbance';
+}
+
 function toApi(row) {
   return {
     id: row.id,
     season: row.season,
     seasonLabel: `${row.season}-${String((row.season + 1) % 100).padStart(2, '0')}`,
     sequenceNumber: row.sequence_number,
-    displayName: row.name || `Disturbance ${row.sequence_number}`,
+    displayName: row.name || `${stageLabel(row.stage)} ${row.sequence_number}`,
     name: row.name,
+    stage: row.stage,
     lat: row.lat,
     lon: row.lon,
     formationProbability2dayPct: row.formation_probability_2day_pct,
@@ -71,6 +76,7 @@ systemsRouter.post('/systems', (req, res) => {
 const PATCHABLE_FIELDS = {
   lat: 'lat',
   lon: 'lon',
+  stage: 'stage',
   formationProbability2dayPct: 'formation_probability_2day_pct',
   formationProbability5dayPct: 'formation_probability_5day_pct',
   formationProbability10dayPct: 'formation_probability_10day_pct',

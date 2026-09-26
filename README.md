@@ -88,8 +88,10 @@ annotations, each owned by a system, editable vertex-by-vertex, always
 visible when their system isn't selected) are both in place now. A
 system's marker, sidebar dot, and every shape/arrow it owns all share one
 color, driven by whichever of its three probability windows is currently
-highest. No cone, the Invest/ETD/ETS promotion ladder, watches/warnings, or
-auth yet — those land in later milestones on top of this same foundation.
+highest. A Disturbance can be promoted to an Invest (Investigate button on
+the selected-system panel, with a confirmation) -- the rest of the
+ETD/ETS/Category promotion ladder, a cone, watches/warnings, and auth are
+still later milestones on top of this same foundation.
 
 To run it:
 

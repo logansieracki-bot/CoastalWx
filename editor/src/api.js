@@ -76,14 +76,19 @@ function annotationToApi(row) {
   return { id: row.id, systemId: row.systemId, type: row.type, points: row.points, createdAt: row.createdAt, updatedAt: row.updatedAt };
 }
 
+function stageLabel(stage) {
+  return stage === 'invest' ? 'Invest' : 'Disturbance';
+}
+
 function toApi(row) {
   return {
     id: row.id,
     season: row.season,
     seasonLabel: `${row.season}-${String((row.season + 1) % 100).padStart(2, '0')}`,
     sequenceNumber: row.sequenceNumber,
-    displayName: row.name || `Disturbance ${row.sequenceNumber}`,
+    displayName: row.name || `${stageLabel(row.stage)} ${row.sequenceNumber}`,
     name: row.name ?? null,
+    stage: row.stage ?? 'disturbance',
     lat: row.lat,
     lon: row.lon,
     formationProbability2dayPct: row.formationProbability2dayPct ?? null,
@@ -109,6 +114,7 @@ const local = {
     const now = new Date().toISOString();
     const row = {
       id: crypto.randomUUID(), season, sequenceNumber, name: null,
+      stage: 'disturbance',
       lat, lon,
       formationProbability2dayPct: formationProbability2dayPct ?? null,
       formationProbability5dayPct: formationProbability5dayPct ?? null,

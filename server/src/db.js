@@ -21,6 +21,7 @@ db.exec(`
     name TEXT,
     lat REAL NOT NULL,
     lon REAL NOT NULL,
+    stage TEXT NOT NULL DEFAULT 'disturbance' CHECK (stage IN ('disturbance', 'invest')),
     formation_probability_2day_pct INTEGER,
     formation_probability_5day_pct INTEGER,
     formation_probability_10day_pct INTEGER,
