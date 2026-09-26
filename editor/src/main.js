@@ -3,7 +3,7 @@ import { createViewState, getAspectFittedBounds, resetView } from './viewState.j
 import { attachNavigation } from './navigation.js';
 import { createMapRenderer } from './mapRenderer.js';
 import { createPointRenderer } from './pointRenderer.js';
-import { api } from './api.js';
+import { api, detectBackend } from './api.js';
 
 const svg = document.getElementById('map');
 const mapWrap = document.getElementById('map-wrap');
@@ -251,6 +251,9 @@ async function init() {
   resetViewBtn.addEventListener('click', () => setView(resetView(viewState)));
 
   window.addEventListener('resize', renderMap);
+
+  await detectBackend();
+  document.getElementById('local-mode-banner').hidden = !api.isLocalOnly();
 
   systems = await api.listSystems();
   setTool('select');

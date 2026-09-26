@@ -1,8 +1,11 @@
 name: Deploy to GitHub Pages
 
-# Publishes the public forecast page (index.html) to GitHub Pages.
-# The /editor + /server app is not included here -- it needs a real
-# server + database to function and Pages only serves static files.
+# Publishes the editor (map + toolbar + sidebar) at the site root -- it's
+# what this project is actually building. It falls back to browser
+# localStorage when no real backend is reachable (which is always true on
+# Pages, since Pages only serves static files -- no server, no database).
+# The earlier sample-data public forecast page still gets published too,
+# just moved to /forecast/ so it isn't lost.
 
 on:
   push:
@@ -29,10 +32,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Stage public site
+      - name: Stage site
         run: |
-          mkdir -p _site
-          cp index.html _site/
+          mkdir -p _site/forecast
+          cp -r editor/. _site/
+          cp index.html _site/forecast/
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

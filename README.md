@@ -55,12 +55,21 @@ coordinates just work.
 
 ## Deployment
 
-`index.html` (the public page) auto-deploys to GitHub Pages via
-`.github/workflows/deploy-pages.yml` on every push to this branch. It stages
-just `index.html` into `_site/` and publishes that -- `/editor` and
-`/server` are deliberately left out, since Pages can't run the backend they
-need. One manual, one-time step this repo needs (not something the workflow
-can do on its own): in **Settings -> Pages -> Build and deployment**, set
+The **editor** auto-deploys to GitHub Pages via
+`.github/workflows/deploy-pages.yml` on every push to this branch, and is
+what you get at the site root. The earlier sample-data public forecast page
+still deploys too, just at `/forecast/`, so it isn't lost.
+
+Pages only serves static files -- no server, no database -- so the deployed
+editor can't reach the real backend described below. It detects that at
+startup and falls back to saving in your browser's own `localStorage`
+instead, with an honest banner saying so; nothing about the editor is
+broken or non-functional there, it's just local-only-per-browser until
+real hosting exists. Run it with a real backend (see below) for shared,
+durable storage.
+
+One manual, one-time step this repo needs (not something the workflow can
+do on its own): in **Settings -> Pages -> Build and deployment**, set
 **Source** to **GitHub Actions**.
 
 ## The editor (`/editor` + `/server`)
