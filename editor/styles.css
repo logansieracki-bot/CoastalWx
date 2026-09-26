@@ -14,6 +14,8 @@
   --ui-accent: #2469d8;
   --ui-accent-soft: #eaf2ff;
   --ui-danger: #b83232;
+  --annotation-color: #2454b8;
+  --annotation-draft-color: #b8562a;
 }
 
 * { box-sizing: border-box; }
@@ -71,6 +73,8 @@ button:hover { border-color: #9db0c7; }
 button.is-active { color: #fff; background: var(--ui-accent); border-color: var(--ui-accent); }
 button.primary { color: #fff; background: var(--ui-accent); border-color: var(--ui-accent); }
 button.danger { color: var(--ui-danger); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:disabled:hover { border-color: var(--ui-border); }
 
 .workspace { flex: 1; min-height: 0; display: flex; }
 
@@ -121,7 +125,7 @@ button.danger { color: var(--ui-danger); }
 
 .map-wrap { flex: 1; position: relative; background: var(--water-color); }
 #map { width: 100%; height: 100%; display: block; cursor: default; }
-#map.tool-create { cursor: crosshair; }
+#map.tool-create, #map.tool-draw { cursor: crosshair; }
 #map.is-panning { cursor: grabbing; }
 
 .land { fill: var(--land-color); stroke: var(--coast-stroke); stroke-width: 1.4px; vector-effect: non-scaling-stroke; }
@@ -135,6 +139,47 @@ button.danger { color: var(--ui-danger); }
 .point-x-fill { stroke-width: 4px; stroke-linecap: round; vector-effect: non-scaling-stroke; cursor: pointer; }
 .point-label { fill: #0b1f3a; font-weight: 700; text-anchor: middle; paint-order: stroke fill; stroke: #fff; stroke-width: 3px; vector-effect: non-scaling-stroke; }
 .point-selection-ring { fill: none; stroke: var(--ui-accent); stroke-width: 1.6px; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
+
+/* Shapes & arrows: fills/lines always render (see annotationRenderer.js);
+   only .annotation-vertex-handle circles are gated on selection. */
+.annotation-shape-fill {
+  fill: color-mix(in srgb, var(--annotation-color) 22%, transparent);
+  stroke: var(--annotation-color); stroke-width: 1.6px; vector-effect: non-scaling-stroke; cursor: pointer;
+}
+.annotation-shape-preview {
+  fill: none; stroke: var(--annotation-color); stroke-width: 1.6px; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; cursor: pointer;
+}
+.annotation-arrow-line {
+  fill: none; stroke: var(--annotation-color); stroke-width: 2.2px; stroke-linecap: round; vector-effect: non-scaling-stroke;
+}
+.annotation-arrow-hit {
+  fill: none; stroke: transparent; stroke-width: 14px; vector-effect: non-scaling-stroke; cursor: pointer;
+}
+.annotation-arrowhead { fill: var(--annotation-color); stroke: none; }
+
+.annotation-draft-shape-fill {
+  fill: color-mix(in srgb, var(--annotation-draft-color) 18%, transparent);
+  stroke: var(--annotation-draft-color); stroke-width: 1.6px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke;
+}
+.annotation-draft-shape-preview {
+  fill: none; stroke: var(--annotation-draft-color); stroke-width: 1.6px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke;
+}
+.annotation-draft-arrow-line {
+  fill: none; stroke: var(--annotation-draft-color); stroke-width: 2.2px; stroke-linecap: round; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke;
+}
+.annotation-draft-arrow-hit { fill: none; stroke: none; }
+.annotation-draft-arrowhead { fill: var(--annotation-draft-color); stroke: none; }
+
+.annotation-vertex-handle {
+  fill: #fff; stroke: var(--annotation-color); stroke-width: 1.8px; vector-effect: non-scaling-stroke; cursor: grab;
+}
+.annotation-draft-handle { stroke: var(--annotation-draft-color); }
+.annotation-draft-handle--origin { fill: var(--annotation-draft-color); }
+
+.annotations-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--ui-border); }
+.annotations-section h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--ui-muted); }
+.selected-annotation-panel .empty-hint { margin: 0 0 10px; }
+.selected-annotation-panel button { width: 100%; }
 
 .fatal-error {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;

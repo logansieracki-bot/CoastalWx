@@ -11,6 +11,8 @@ const DB_PATH = process.env.NOREASTERCASTER_DB || join(DATA_DIR, 'noreastercaste
 
 export const db = new DatabaseSync(DB_PATH);
 
+db.exec('PRAGMA foreign_keys = ON;');
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS systems (
     id TEXT PRIMARY KEY,
@@ -28,3 +30,16 @@ db.exec(`
     updated_at TEXT NOT NULL
   )
 `);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS annotations (
+    id TEXT PRIMARY KEY,
+    system_id TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK (type IN ('shape', 'arrow')),
+    points TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`);
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_annotations_system_id ON annotations(system_id)');

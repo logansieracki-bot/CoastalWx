@@ -82,11 +82,12 @@ where a "system" starts life as a **Disturbance** — a probability-colored
 X you place on the map — and will progress through Invest → ETD → named
 ETS → Category 1-5 as later milestones add the rest of the lifecycle.
 
-This first milestone is intentionally a thin, real, end-to-end slice, not
-the full editor: place a Disturbance, set its formation probability/
-pressure/wind, save, reload, see it persisted. No cone, AOI shapes, arrow
-tool, watches/warnings, or auth yet — those land in later milestones on top
-of this same foundation.
+Disturbances (place, drag, edit formation probability/pressure/wind) and
+per-system shapes/arrows (freeform smoothed shape and arrow annotations,
+each owned by a system, editable vertex-by-vertex, always visible when
+their system isn't selected) are both in place now. No cone, the
+Invest/ETD/ETS promotion ladder, watches/warnings, or auth yet — those
+land in later milestones on top of this same foundation.
 
 To run it:
 

@@ -1,5 +1,6 @@
 const BASE = '/api';
 const STORAGE_KEY = 'noreastercaster:systems';
+const ANNOTATIONS_STORAGE_KEY = 'noreastercaster:annotations';
 
 // --- remote backend (real server + database) ---
 
@@ -16,11 +17,26 @@ async function request(path, options) {
   return res.json();
 }
 
+function pointsToWire(points) { return points.map((p) => [p.lon, p.lat]); }
+function pointsFromWire(pairs) { return pairs.map(([lon, lat]) => ({ lon, lat })); }
+function annotationFromWire(a) { return { ...a, points: pointsFromWire(a.points) }; }
+
 const remote = {
   listSystems: () => request('/systems'),
   createSystem: (data) => request('/systems', { method: 'POST', body: JSON.stringify(data) }),
   updateSystem: (id, data) => request(`/systems/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteSystem: (id) => request(`/systems/${id}`, { method: 'DELETE' }),
+
+  listAnnotations: async () => (await request('/annotations')).map(annotationFromWire),
+  createAnnotation: async (systemId, { type, points }) =>
+    annotationFromWire(await request(`/systems/${systemId}/annotations`, {
+      method: 'POST', body: JSON.stringify({ type, points: pointsToWire(points) }),
+    })),
+  updateAnnotation: async (id, { points }) =>
+    annotationFromWire(await request(`/annotations/${id}`, {
+      method: 'PATCH', body: JSON.stringify({ points: pointsToWire(points) }),
+    })),
+  deleteAnnotation: (id) => request(`/annotations/${id}`, { method: 'DELETE' }),
 };
 
 // --- local fallback (browser localStorage, no server available) ---
@@ -42,6 +58,22 @@ function readAll() {
 
 function writeAll(rows) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
+}
+
+function readAllAnnotations() {
+  try {
+    return JSON.parse(localStorage.getItem(ANNOTATIONS_STORAGE_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function writeAllAnnotations(rows) {
+  localStorage.setItem(ANNOTATIONS_STORAGE_KEY, JSON.stringify(rows));
+}
+
+function annotationToApi(row) {
+  return { id: row.id, systemId: row.systemId, type: row.type, points: row.points, createdAt: row.createdAt, updatedAt: row.updatedAt };
 }
 
 function toApi(row) {
@@ -92,6 +124,31 @@ const local = {
   },
   async deleteSystem(id) {
     writeAll(readAll().filter((r) => r.id !== id));
+    // Cascade, mirroring the server's ON DELETE CASCADE -- otherwise
+    // localStorage mode leaks orphaned annotations on every system delete.
+    writeAllAnnotations(readAllAnnotations().filter((r) => r.systemId !== id));
+  },
+
+  async listAnnotations() {
+    return readAllAnnotations().map(annotationToApi);
+  },
+  async createAnnotation(systemId, { type, points }) {
+    const rows = readAllAnnotations();
+    const now = new Date().toISOString();
+    const row = { id: crypto.randomUUID(), systemId, type, points, createdAt: now, updatedAt: now };
+    writeAllAnnotations([...rows, row]);
+    return annotationToApi(row);
+  },
+  async updateAnnotation(id, { points }) {
+    const rows = readAllAnnotations();
+    const idx = rows.findIndex((r) => r.id === id);
+    if (idx === -1) throw new Error('not_found');
+    rows[idx] = { ...rows[idx], points, updatedAt: new Date().toISOString() };
+    writeAllAnnotations(rows);
+    return annotationToApi(rows[idx]);
+  },
+  async deleteAnnotation(id) {
+    writeAllAnnotations(readAllAnnotations().filter((r) => r.id !== id));
   },
 };
 
@@ -118,5 +175,9 @@ export const api = {
   createSystem: (...args) => impl().createSystem(...args),
   updateSystem: (...args) => impl().updateSystem(...args),
   deleteSystem: (...args) => impl().deleteSystem(...args),
+  listAnnotations: (...args) => impl().listAnnotations(...args),
+  createAnnotation: (...args) => impl().createAnnotation(...args),
+  updateAnnotation: (...args) => impl().updateAnnotation(...args),
+  deleteAnnotation: (...args) => impl().deleteAnnotation(...args),
   isLocalOnly: () => backend === 'local',
 };

@@ -50,3 +50,20 @@ export function unprojectXY(x, y, bounds, width, height) {
     lat: bounds.north - (y / height) * latSpan
   };
 }
+
+// Inverse of unprojectXY -- geographic point to client-pixel coordinates.
+// Used for screen-space hit-testing (e.g. "is this click near the shape's
+// first vertex" for loop-closing) where distances need to be in pixels,
+// not degrees.
+export function projectLonLat(lon, lat, bounds, width, height) {
+  const lonSpan = bounds.east - bounds.west;
+  const latSpan = bounds.north - bounds.south;
+  if (!(width > 0) || !(height > 0) || !(lonSpan > 0) || !(latSpan > 0)) {
+    throw new RangeError('projection requires positive viewport and geographic spans');
+  }
+
+  return {
+    x: ((lon - bounds.west) / lonSpan) * width,
+    y: ((bounds.north - lat) / latSpan) * height
+  };
+}
