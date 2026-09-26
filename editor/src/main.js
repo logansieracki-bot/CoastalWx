@@ -186,46 +186,83 @@ function renderSidebar() {
   renderSelectedPanel();
 }
 
-async function handleMapClick(geo) {
-  if (tool === 'create-disturbance') {
-    const created = await api.createSystem({ lat: geo.lat, lon: geo.lon, formationProbabilityPct: 0 });
-    systems = [...systems, created];
-    selectedId = created.id;
-    setTool('select');
-    renderSidebar();
-    renderMap();
-    return;
-  }
-  // Select tool: blank-map click deselects.
-  if (selectedId !== null) select(null);
+async function placeDisturbance(geo) {
+  const created = await api.createSystem({ lat: geo.lat, lon: geo.lon, formationProbabilityPct: 0 });
+  systems = [...systems, created];
+  selectedId = created.id;
+  setTool('select');
+  renderSidebar();
+  renderMap();
 }
 
-function setupMapClick() {
-  let downGeo = null;
+function geoAtClient(event, rect) {
+  const bounds = currentBounds();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  return {
+    lon: bounds.west + (x / rect.width) * (bounds.east - bounds.west),
+    lat: bounds.north - (y / rect.height) * (bounds.north - bounds.south),
+  };
+}
+
+// Owns click-to-select/deselect/place and drag-to-move-a-point. Pure panning
+// on blank map space is still navigation.js's job (see shouldStartPan below) --
+// this only ever takes over a gesture that started ON a marker, or a plain
+// click, so the two never fight over the same pointer.
+function setupPointerHandling() {
+  let gesture = null; // { kind: 'point', id, downX, downY, moved } | { kind: 'blank', downX, downY }
+
   svg.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
-    const rect = svg.getBoundingClientRect();
-    downGeo = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const hit = event.target.closest?.('[data-system-id]');
+    if (tool === 'select' && hit) {
+      gesture = { kind: 'point', id: hit.dataset.systemId, downX: event.clientX, downY: event.clientY, moved: false };
+      svg.setPointerCapture?.(event.pointerId);
+    } else {
+      gesture = { kind: 'blank', downX: event.clientX, downY: event.clientY };
+    }
   });
-  svg.addEventListener('pointerup', (event) => {
-    if (!downGeo) return;
-    const rect = svg.getBoundingClientRect();
-    const upX = event.clientX - rect.left;
-    const upY = event.clientY - rect.top;
-    const moved = Math.hypot(upX - downGeo.x, upY - downGeo.y);
-    downGeo = null;
-    if (moved > 4) return; // treat as a drag/pan, not a click
 
-    // Did we click an existing point?
-    const target = event.target.closest?.('[data-system-id]');
-    if (target) {
-      select(target.dataset.systemId);
+  svg.addEventListener('pointermove', (event) => {
+    if (gesture?.kind !== 'point') return;
+    const dist = Math.hypot(event.clientX - gesture.downX, event.clientY - gesture.downY);
+    if (dist <= 4) return;
+    gesture.moved = true;
+    const system = systems.find((s) => s.id === gesture.id);
+    if (!system) return;
+    const geo = geoAtClient(event, svg.getBoundingClientRect());
+    system.lat = geo.lat;
+    system.lon = geo.lon;
+    renderMap();
+  });
+
+  svg.addEventListener('pointerup', async (event) => {
+    const current = gesture;
+    gesture = null;
+    if (!current) return;
+
+    if (current.kind === 'point') {
+      const system = systems.find((s) => s.id === current.id);
+      if (current.moved && system) {
+        const updated = await api.updateSystem(system.id, { lat: system.lat, lon: system.lon });
+        systems = systems.map((s) => (s.id === updated.id ? updated : s));
+        renderSidebar();
+        renderMap();
+      } else {
+        select(current.id);
+      }
       return;
     }
-    const bounds = currentBounds();
-    const lon = bounds.west + (upX / rect.width) * (bounds.east - bounds.west);
-    const lat = bounds.north - (upY / rect.height) * (bounds.north - bounds.south);
-    handleMapClick({ lon, lat });
+
+    // Blank space: a real drag here was a pan (navigation.js already moved
+    // the camera) -- only act on it if it was a plain click.
+    const dist = Math.hypot(event.clientX - current.downX, event.clientY - current.downY);
+    if (dist > 4) return;
+    if (tool === 'create-disturbance') {
+      await placeDisturbance(geoAtClient(event, svg.getBoundingClientRect()));
+    } else if (selectedId !== null) {
+      select(null);
+    }
   });
 }
 
@@ -239,10 +276,10 @@ async function init() {
     getView: () => viewState,
     setView,
     getRenderedBounds: () => mapRenderer.getLastRender()?.bounds,
-    shouldStartPan: () => tool !== 'create-disturbance',
+    shouldStartPan: (event) => tool !== 'create-disturbance' && !event.target.closest?.('[data-system-id]'),
   });
 
-  setupMapClick();
+  setupPointerHandling();
 
   for (const btn of toolButtons) {
     btn.addEventListener('click', () => setTool(btn.dataset.tool));

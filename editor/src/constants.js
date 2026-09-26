@@ -1,5 +1,3 @@
-export const WATER_COLOR = '#64A2CA';
-export const LAND_COLOR = '#BEBEBE';
 export const LAT_GRID_STEP = 5;
 export const LON_GRID_STEP = 10;
 export const MIN_LON_SPAN = 6;

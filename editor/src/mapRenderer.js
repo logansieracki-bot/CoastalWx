@@ -1,4 +1,3 @@
-import { WATER_COLOR } from './constants.js';
 import { visibleLatitudes, visibleLongitudes, formatLatitude, formatLongitude } from './grid.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -75,7 +74,6 @@ function addText(group, { x, y, text, size, anchor = 'middle', baseline = 'middl
 export function createMapRenderer(svg, geography) {
   svg.replaceChildren();
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-  svg.style.backgroundColor = WATER_COLOR;
 
   const geographyGroup = svgElement('g', { id: 'geography' });
   const gridGroup = svgElement('g', { id: 'grid-lines' });
