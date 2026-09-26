@@ -48,3 +48,20 @@ db.exec(`
 `);
 
 db.exec('CREATE INDEX IF NOT EXISTS idx_annotations_system_id ON annotations(system_id)');
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS forecast_points (
+    id TEXT PRIMARY KEY,
+    system_id TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+    sequence INTEGER NOT NULL,
+    lon REAL NOT NULL,
+    lat REAL NOT NULL,
+    hour INTEGER NOT NULL,
+    wind_mph REAL,
+    spread_mi REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`);
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_forecast_points_system_id ON forecast_points(system_id)');

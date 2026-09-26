@@ -192,10 +192,32 @@ button:disabled:hover { border-color: var(--ui-border); }
 .annotation-draft-handle { stroke: var(--annotation-draft-color); }
 .annotation-draft-handle--origin { fill: var(--annotation-draft-color); }
 
+/* Forecast track + cone of uncertainty: translucent white fill (dimmer for
+   the Day 4-5 continuation, standing in for a dotted "less certain" look
+   without a separate SVG pattern), a dark outer outline once a Day 4-5
+   period exists, a lighter inner outline around Day 1-3, and a dark
+   centerline through every sample. Never interactive -- selecting/dragging
+   still goes through the system marker and forecast-point sidebar rows. */
+.forecast-cone, .forecast-cone-late, .forecast-cone-outline, .forecast-track { pointer-events: none; }
+.forecast-cone.cone-fill { fill: rgba(255, 255, 255, .92); stroke: none; }
+.forecast-cone-late.cone-day4-5 { fill: rgba(255, 255, 255, .55); stroke: none; }
+.forecast-cone-outline { stroke: none; }
+.forecast-cone-outline-full { fill: rgba(17, 17, 17, .9); }
+.forecast-cone-outline-early { fill: rgba(255, 255, 255, .95); }
+.forecast-track { fill: none; stroke: #111820; stroke-width: 2.1px; vector-effect: non-scaling-stroke; }
+
 .annotations-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--ui-border); }
 .annotations-section h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--ui-muted); }
 .selected-annotation-panel .empty-hint { margin: 0 0 10px; }
 .selected-annotation-panel button { width: 100%; }
+
+.forecast-point-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.forecast-point-label { font-size: 12px; color: var(--ui-muted); width: 34px; flex-shrink: 0; }
+.forecast-point-row input {
+  width: 50px; min-width: 0; border: 1px solid var(--ui-border); border-radius: 7px;
+  padding: 5px 6px; font-size: 12px; color: var(--ui-text);
+}
+.forecast-point-row button { padding: 5px 8px; font-size: 12px; flex-shrink: 0; }
 
 .formed-toggle {
   display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 10px;

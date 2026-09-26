@@ -1,12 +1,13 @@
 import {
   INITIAL_BOUNDS, maxFormationProbabilityPct, systemColor, displayLabel,
-  intensityScore, intensityCategoryKey, CATEGORY_INFO,
+  intensityScore, intensityCategoryKey, CATEGORY_INFO, defaultSpreadForHour,
 } from './constants.js';
 import { createViewState, getAspectFittedBounds, resetView } from './viewState.js';
 import { attachNavigation } from './navigation.js';
 import { createMapRenderer } from './mapRenderer.js';
 import { createPointRenderer } from './pointRenderer.js';
 import { createAnnotationRenderer } from './annotationRenderer.js';
+import { createTrackConeRenderer } from './trackConeRenderer.js';
 import { projectLonLat } from './geo.js';
 import { api, detectBackend } from './api.js';
 
@@ -24,12 +25,14 @@ const TOOL_HINTS = {
   'create-disturbance': 'Click the map to place the new disturbance.',
   shape: 'Click to add points. Click back near the first point to close the shape. Escape cancels.',
   arrow: 'Click to add points. Double-click the last point to finish. Escape cancels.',
+  'add-forecast-point': 'Click the map to add a forecast point to the track.',
 };
 
 let systems = [];
 let selectedId = null;
 let annotations = [];
 let selectedAnnotationId = null;
+let forecastPoints = [];
 let drawingSession = null; // { systemId, type: 'shape'|'arrow', points: [{lon,lat}] } | null
 let lastDrawClick = null; // { x, y, t } -- manual double-click detection for the arrow tool
 let tool = 'select';
@@ -37,6 +40,7 @@ let viewState = createViewState(INITIAL_BOUNDS);
 let mapRenderer = null;
 let pointRenderer = null;
 let annotationRenderer = null;
+let trackConeRenderer = null;
 
 async function loadGeography() {
   const [land, lakes, borders, states] = await Promise.all(
@@ -53,10 +57,24 @@ function currentBounds() {
   return getAspectFittedBounds(viewState, aspect);
 }
 
+// The selected system's own lat/lon is always its hour-0 "current position"
+// -- forecast_points never duplicate it, so it's synthesized here and
+// prepended ahead of the saved forecast points (ordered by sequence).
+function selectedSystemTrackPoints() {
+  const system = systems.find((s) => s.id === selectedId);
+  if (!system) return [];
+  const own = forecastPoints
+    .filter((p) => p.systemId === selectedId)
+    .sort((a, b) => a.sequence - b.sequence)
+    .map((p) => ({ lon: p.lon, lat: p.lat, hour: p.hour, spread: p.spreadMi }));
+  return [{ lon: system.lon, lat: system.lat, hour: 0, spread: 0 }, ...own];
+}
+
 function renderMap() {
   const rect = svg.getBoundingClientRect();
   const bounds = currentBounds();
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
+  trackConeRenderer.render({ points: selectedSystemTrackPoints(), bounds, width: rect.width, height: rect.height });
   annotationRenderer.render({ annotations, selectedAnnotationId, draft: drawingSession, systems, bounds, width: rect.width, height: rect.height });
   pointRenderer.render({ systems, selectedId, bounds, width: rect.width, height: rect.height });
 }
@@ -71,7 +89,7 @@ function setTool(next) {
   drawingSession = null; // nothing is persisted until finish, so switching tools loses nothing
   lastDrawClick = null;
   for (const btn of toolButtons) btn.classList.toggle('is-active', btn.dataset.tool === tool);
-  svg.classList.toggle('tool-create', tool === 'create-disturbance');
+  svg.classList.toggle('tool-create', tool === 'create-disturbance' || tool === 'add-forecast-point');
   svg.classList.toggle('tool-draw', tool === 'shape' || tool === 'arrow');
   placementHint.textContent = TOOL_HINTS[tool] || '';
   placementHint.hidden = !TOOL_HINTS[tool];
@@ -210,6 +228,77 @@ function renderAnnotationsSection(system) {
   });
   panel.append(title, meta, deleteBtn);
   selectedPanelEl.append(panel);
+}
+
+function renderForecastTrackSection(system) {
+  const ownPoints = forecastPoints
+    .filter((p) => p.systemId === system.id)
+    .sort((a, b) => a.sequence - b.sequence);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'annotations-section';
+  const heading = document.createElement('h4');
+  heading.textContent = 'Forecast track';
+  wrap.append(heading);
+
+  if (ownPoints.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-hint';
+    empty.textContent = 'None yet — use Add Forecast Point above.';
+    wrap.append(empty);
+  }
+
+  for (const point of ownPoints) {
+    const row = document.createElement('div');
+    row.className = 'forecast-point-row';
+
+    const label = document.createElement('span');
+    label.className = 'forecast-point-label';
+    label.textContent = `+${point.hour}h`;
+
+    const hourInput = document.createElement('input');
+    hourInput.type = 'number';
+    hourInput.min = '0';
+    hourInput.step = '1';
+    hourInput.value = point.hour;
+    hourInput.placeholder = 'hr';
+    hourInput.title = 'Forecast hour';
+
+    const spreadInput = document.createElement('input');
+    spreadInput.type = 'number';
+    spreadInput.min = '0';
+    spreadInput.step = '1';
+    spreadInput.value = point.spreadMi;
+    spreadInput.placeholder = 'mi';
+    spreadInput.title = 'Cone spread (mi)';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.textContent = 'Save';
+    saveBtn.addEventListener('click', async () => {
+      const updated = await api.updateForecastPoint(point.id, {
+        hour: hourInput.value === '' ? point.hour : Number(hourInput.value),
+        spreadMi: spreadInput.value === '' ? 0 : Number(spreadInput.value),
+      });
+      forecastPoints = forecastPoints.map((p) => (p.id === updated.id ? updated : p));
+      renderSidebar();
+      renderMap();
+    });
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.className = 'danger';
+    deleteBtn.addEventListener('click', async () => {
+      await api.deleteForecastPoint(point.id);
+      forecastPoints = forecastPoints.filter((p) => p.id !== point.id);
+      renderSidebar();
+      renderMap();
+    });
+
+    row.append(label, hourInput, spreadInput, saveBtn, deleteBtn);
+    wrap.append(row);
+  }
+
+  selectedPanelEl.append(wrap);
 }
 
 // Live intensity score/category, computed from the form's current (maybe
@@ -416,6 +505,7 @@ function renderSelectedPanel() {
     await api.deleteSystem(system.id);
     systems = systems.filter((s) => s.id !== system.id);
     annotations = annotations.filter((a) => a.systemId !== system.id);
+    forecastPoints = forecastPoints.filter((p) => p.systemId !== system.id);
     select(null);
   });
 
@@ -425,6 +515,7 @@ function renderSelectedPanel() {
   selectedPanelEl.append(actions);
 
   renderIntensitySection(system, { windInput, gustInput, radiusInput, pressureInput });
+  renderForecastTrackSection(system);
   renderAnnotationsSection(system);
 }
 
@@ -443,6 +534,19 @@ async function placeDisturbance(geo) {
   systems = [...systems, created];
   setTool('select');
   select(created.id);
+}
+
+async function placeForecastPoint(geo) {
+  const own = forecastPoints.filter((p) => p.systemId === selectedId);
+  const lastHour = own.length ? Math.max(...own.map((p) => p.hour)) : 0;
+  const hour = lastHour + 12;
+  const created = await api.createForecastPoint(selectedId, {
+    lon: geo.lon, lat: geo.lat, hour, spreadMi: defaultSpreadForHour(hour),
+  });
+  forecastPoints = [...forecastPoints, created];
+  setTool('select');
+  renderSidebar();
+  renderMap();
 }
 
 function geoAtClient(event, rect) {
@@ -645,6 +749,8 @@ function setupPointerHandling() {
     const geo = geoAtClient(event, svg.getBoundingClientRect());
     if (tool === 'create-disturbance') {
       await placeDisturbance(geo);
+    } else if (tool === 'add-forecast-point') {
+      await placeForecastPoint(geo);
     } else if (tool === 'shape' || tool === 'arrow') {
       await handleDrawClick(geo, event);
     } else if (selectedId !== null) {
@@ -656,6 +762,7 @@ function setupPointerHandling() {
 async function init() {
   const geography = await loadGeography();
   mapRenderer = createMapRenderer(svg, geography);
+  trackConeRenderer = createTrackConeRenderer(svg);
   annotationRenderer = createAnnotationRenderer(svg);
   pointRenderer = createPointRenderer(svg);
 
@@ -665,7 +772,7 @@ async function init() {
     setView,
     getRenderedBounds: () => mapRenderer.getLastRender()?.bounds,
     shouldStartPan: (event) =>
-      tool !== 'create-disturbance' && tool !== 'shape' && tool !== 'arrow' &&
+      tool !== 'create-disturbance' && tool !== 'shape' && tool !== 'arrow' && tool !== 'add-forecast-point' &&
       !event.target.closest?.('[data-system-id]') &&
       !event.target.closest?.('[data-annotation-id]') &&
       !event.target.closest?.('[data-vertex-index]'),
@@ -687,7 +794,7 @@ async function init() {
   await detectBackend();
   document.getElementById('local-mode-banner').hidden = !api.isLocalOnly();
 
-  [systems, annotations] = await Promise.all([api.listSystems(), api.listAnnotations()]);
+  [systems, annotations, forecastPoints] = await Promise.all([api.listSystems(), api.listAnnotations(), api.listForecastPoints()]);
   updateToolAvailability();
   setTool('select');
   renderSidebar();

@@ -1,6 +1,7 @@
 const BASE = '/api';
 const STORAGE_KEY = 'noreastercaster:systems';
 const ANNOTATIONS_STORAGE_KEY = 'noreastercaster:annotations';
+const FORECAST_POINTS_STORAGE_KEY = 'noreastercaster:forecastPoints';
 
 // --- remote backend (real server + database) ---
 
@@ -37,6 +38,11 @@ const remote = {
       method: 'PATCH', body: JSON.stringify({ points: pointsToWire(points) }),
     })),
   deleteAnnotation: (id) => request(`/annotations/${id}`, { method: 'DELETE' }),
+
+  listForecastPoints: () => request('/forecast-points'),
+  createForecastPoint: (systemId, data) => request(`/systems/${systemId}/forecast-points`, { method: 'POST', body: JSON.stringify(data) }),
+  updateForecastPoint: (id, data) => request(`/forecast-points/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteForecastPoint: (id) => request(`/forecast-points/${id}`, { method: 'DELETE' }),
 };
 
 // --- local fallback (browser localStorage, no server available) ---
@@ -74,6 +80,27 @@ function writeAllAnnotations(rows) {
 
 function annotationToApi(row) {
   return { id: row.id, systemId: row.systemId, type: row.type, points: row.points, createdAt: row.createdAt, updatedAt: row.updatedAt };
+}
+
+function readAllForecastPoints() {
+  try {
+    return JSON.parse(localStorage.getItem(FORECAST_POINTS_STORAGE_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function writeAllForecastPoints(rows) {
+  localStorage.setItem(FORECAST_POINTS_STORAGE_KEY, JSON.stringify(rows));
+}
+
+function forecastPointToApi(row) {
+  return {
+    id: row.id, systemId: row.systemId, sequence: row.sequence,
+    lon: row.lon, lat: row.lat, hour: row.hour,
+    windMph: row.windMph ?? null, spreadMi: row.spreadMi ?? 0,
+    createdAt: row.createdAt, updatedAt: row.updatedAt,
+  };
 }
 
 function stageLabel(stage) {
@@ -139,8 +166,10 @@ const local = {
   async deleteSystem(id) {
     writeAll(readAll().filter((r) => r.id !== id));
     // Cascade, mirroring the server's ON DELETE CASCADE -- otherwise
-    // localStorage mode leaks orphaned annotations on every system delete.
+    // localStorage mode leaks orphaned annotations/forecast points on every
+    // system delete.
     writeAllAnnotations(readAllAnnotations().filter((r) => r.systemId !== id));
+    writeAllForecastPoints(readAllForecastPoints().filter((r) => r.systemId !== id));
   },
 
   async listAnnotations() {
@@ -163,6 +192,33 @@ const local = {
   },
   async deleteAnnotation(id) {
     writeAllAnnotations(readAllAnnotations().filter((r) => r.id !== id));
+  },
+
+  async listForecastPoints() {
+    return readAllForecastPoints().map(forecastPointToApi);
+  },
+  async createForecastPoint(systemId, { lon, lat, hour, windMph, spreadMi }) {
+    const rows = readAllForecastPoints();
+    const sequence = Math.max(0, ...rows.filter((r) => r.systemId === systemId).map((r) => r.sequence)) + 1;
+    const now = new Date().toISOString();
+    const row = {
+      id: crypto.randomUUID(), systemId, sequence, lon, lat, hour,
+      windMph: windMph ?? null, spreadMi: spreadMi ?? 0,
+      createdAt: now, updatedAt: now,
+    };
+    writeAllForecastPoints([...rows, row]);
+    return forecastPointToApi(row);
+  },
+  async updateForecastPoint(id, patch) {
+    const rows = readAllForecastPoints();
+    const idx = rows.findIndex((r) => r.id === id);
+    if (idx === -1) throw new Error('not_found');
+    rows[idx] = { ...rows[idx], ...patch, updatedAt: new Date().toISOString() };
+    writeAllForecastPoints(rows);
+    return forecastPointToApi(rows[idx]);
+  },
+  async deleteForecastPoint(id) {
+    writeAllForecastPoints(readAllForecastPoints().filter((r) => r.id !== id));
   },
 };
 
@@ -193,5 +249,9 @@ export const api = {
   createAnnotation: (...args) => impl().createAnnotation(...args),
   updateAnnotation: (...args) => impl().updateAnnotation(...args),
   deleteAnnotation: (...args) => impl().deleteAnnotation(...args),
+  listForecastPoints: (...args) => impl().listForecastPoints(...args),
+  createForecastPoint: (...args) => impl().createForecastPoint(...args),
+  updateForecastPoint: (...args) => impl().updateForecastPoint(...args),
+  deleteForecastPoint: (...args) => impl().deleteForecastPoint(...args),
   isLocalOnly: () => backend === 'local',
 };

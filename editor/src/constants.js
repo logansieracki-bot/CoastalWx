@@ -92,3 +92,37 @@ export function systemColor(system) {
   }
   return PROBABILITY_COLORS[probabilityTier(maxFormationProbabilityPct(system))];
 }
+
+// Used everywhere a mile radius needs converting to a degree radius (cone
+// spread, forecast-point geometry) -- one shared constant instead of being
+// redefined per file.
+export const MILES_PER_DEGREE_LAT = 69.0934;
+
+// Default cone-radius (spread, in miles) suggested for a new forecast point
+// at a given lead-time hour: a piecewise-linear curve through control
+// points at the hours NHC actually issues advisory points, extrapolated
+// past 120h. Just a starting point the forecaster can freely override --
+// not a rule, there's no historical-track-error data behind it.
+const SPREAD_PRESETS = [
+  [0, 0],
+  [12, 20],
+  [24, 35],
+  [36, 50],
+  [48, 65],
+  [72, 100],
+  [96, 140],
+  [120, 180],
+];
+
+export function defaultSpreadForHour(hour) {
+  const h = Math.max(0, Number(hour) || 0);
+  if (h >= 120) return 180 + ((h - 120) / 24) * 40;
+  for (let i = 1; i < SPREAD_PRESETS.length; i++) {
+    const [h1, s1] = SPREAD_PRESETS[i];
+    if (h <= h1) {
+      const [h0, s0] = SPREAD_PRESETS[i - 1];
+      return s0 + (s1 - s0) * ((h - h0) / (h1 - h0));
+    }
+  }
+  return 0;
+}
