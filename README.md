@@ -102,13 +102,24 @@ system's marker, sidebar dot, and every shape/arrow it owns all share one
 color — the intensity category color once classified, otherwise whichever
 of its three probability windows is currently highest.
 
-A selected system can also have a forecast track: place forecast points
-(Add Forecast Point button) at increasing lead-time hours, each with an
-editable forecast hour and cone "spread" (radius, in miles); the map draws
-an NHC-style cone of uncertainty and track line through the system's
-current position and every forecast point, with the usual Day 1-3 solid
-cone and a lighter Day 4-5 continuation once a point passes 72 hours.
-Only the selected system's cone/track renders, to keep the map readable.
+Investigate requires the system already be Formed, and cones are for
+classified systems only: once a system is Classified, its shapes/arrows
+are hidden (the rows aren't deleted, just no longer shown or drawable)
+and its forecast track takes over as its visual representation. Place
+forecast points (Add Forecast Point button) at increasing lead-time
+hours, each with an editable forecast hour, forecast sustained wind, and
+cone "spread" (radius, in miles); the map draws an NHC-style cone of
+uncertainty and track line through the system's current position and
+every forecast point, with the usual Day 1-3 solid cone and a lighter
+Day 4-5 continuation once a point passes 72 hours. Each forecast point
+also gets a dot marker with its lead-time hour and a one-character
+intensity symbol (D/S/1-5, the same category scale as the system's own
+classification, computed from that point's forecast wind held against
+the system's current gust/radius/pressure) once its wind is filled in.
+Forecast points are selectable and draggable directly on the map, the
+same as the system's own marker, in addition to editing them by hand in
+the sidebar. Only the selected system's cone/track renders, to keep the
+map readable.
 
 Advisories, downgrading and the rest of the full classification workflow,
 watches/warnings, and auth are still later milestones on top of this same

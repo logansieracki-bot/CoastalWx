@@ -67,7 +67,7 @@ export function createTrackConeRenderer(svg) {
   layer.append(defs, coneGroup, trackGroup, pointsGroup);
   svg.append(layer);
 
-  function render({ points, bounds, width, height }) {
+  function render({ points, selectedForecastPointId, bounds, width, height }) {
     fullMask.replaceChildren();
     earlyMask.replaceChildren();
     lateOnlyMask.replaceChildren();
@@ -125,11 +125,24 @@ export function createTrackConeRenderer(svg) {
     // proper get a dot + hour label.
     for (const point of points) {
       if (!(point.hour > 0)) continue;
-      const marker = el('g', { class: 'forecast-point-marker' });
+      const marker = el('g', { class: 'forecast-point-marker', 'data-forecast-point-id': point.id });
+      if (point.id === selectedForecastPointId) {
+        marker.append(el('circle', { class: 'point-selection-ring', cx: point.lon, cy: -point.lat, r: unit * 12 }));
+      }
       marker.append(el('circle', {
         class: 'forecast-point-core',
         cx: point.lon, cy: -point.lat, r: unit * 7,
       }));
+      if (point.symbol) {
+        const symbol = el('text', {
+          class: 'forecast-point-symbol',
+          x: point.lon, y: -point.lat,
+          'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'font-size': unit * 9,
+        });
+        symbol.textContent = point.symbol;
+        marker.append(symbol);
+      }
       const label = el('text', {
         class: 'forecast-point-marker-label',
         x: point.lon + unit * 11, y: -point.lat - unit * 12,

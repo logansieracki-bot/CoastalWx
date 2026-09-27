@@ -75,6 +75,15 @@ export function intensityCategoryKey(score) {
   return 'cat5';
 }
 
+// One-character symbol for a category key -- used inside forecast-point
+// markers on the track, where a full label won't fit. Categories 1-5 use
+// their digit rather than a letter since that's already how CATEGORY_INFO's
+// own labels ("Category 3") abbreviate in speech.
+const CATEGORY_SYMBOL = { ed: 'D', ets: 'S', cat1: '1', cat2: '2', cat3: '3', cat4: '4', cat5: '5' };
+export function categorySymbol(key) {
+  return CATEGORY_SYMBOL[key] ?? null;
+}
+
 // The name/stage-based label until a system is classified, then its own
 // name if set, else the category label ("Category 3").
 export function displayLabel(system) {

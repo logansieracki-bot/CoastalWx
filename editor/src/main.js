@@ -1,6 +1,6 @@
 import {
   INITIAL_BOUNDS, maxFormationProbabilityPct, systemColor, displayLabel,
-  intensityScore, intensityCategoryKey, CATEGORY_INFO, defaultSpreadForHour,
+  intensityScore, intensityCategoryKey, categorySymbol, CATEGORY_INFO, defaultSpreadForHour,
 } from './constants.js';
 import { createViewState, getAspectFittedBounds, resetView } from './viewState.js';
 import { attachNavigation } from './navigation.js';
@@ -34,6 +34,7 @@ let selectedId = null;
 let annotations = [];
 let selectedAnnotationId = null;
 let forecastPoints = [];
+let selectedForecastPointId = null;
 let drawingSession = null; // { systemId, type: 'shape'|'arrow', points: [{lon,lat}] } | null
 let lastDrawClick = null; // { x, y, t } -- manual double-click detection for the arrow tool
 let tool = 'select';
@@ -61,13 +62,27 @@ function currentBounds() {
 // The selected system's own lat/lon is always its hour-0 "current position"
 // -- forecast_points never duplicate it, so it's synthesized here and
 // prepended ahead of the saved forecast points (ordered by sequence).
+// Each forecast point's marker symbol reuses the exact same category scale
+// as the system's own classification -- its forecast wind stands in for
+// system.windMph, while gust/radius/pressure are held at the system's
+// current values (this app doesn't forecast those independently per point).
+// null (no symbol shown) until the point's own wind is filled in.
+function pointIntensitySymbol(system, windMph) {
+  return categorySymbol(intensityCategoryKey(intensityScore({
+    windMph, gustMph: system.gustMph, galeRadiusMi: system.galeRadiusMi, pressureMb: system.pressureMb,
+  })));
+}
+
 function selectedSystemTrackPoints() {
   const system = systems.find((s) => s.id === selectedId);
   if (!system || !system.classified) return [];
   const own = forecastPoints
     .filter((p) => p.systemId === selectedId)
     .sort((a, b) => a.sequence - b.sequence)
-    .map((p) => ({ lon: p.lon, lat: p.lat, hour: p.hour, spread: p.spreadMi }));
+    .map((p) => ({
+      id: p.id, lon: p.lon, lat: p.lat, hour: p.hour, spread: p.spreadMi,
+      symbol: pointIntensitySymbol(system, p.windMph),
+    }));
   return [{ lon: system.lon, lat: system.lat, hour: 0, spread: 0 }, ...own];
 }
 
@@ -83,7 +98,7 @@ function renderMap() {
   const rect = svg.getBoundingClientRect();
   const bounds = currentBounds();
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
-  trackConeRenderer.render({ points: selectedSystemTrackPoints(), bounds, width: rect.width, height: rect.height });
+  trackConeRenderer.render({ points: selectedSystemTrackPoints(), selectedForecastPointId, bounds, width: rect.width, height: rect.height });
   annotationRenderer.render({ annotations: visibleAnnotations(), selectedAnnotationId, draft: drawingSession, systems, bounds, width: rect.width, height: rect.height });
   pointRenderer.render({ systems, selectedId, bounds, width: rect.width, height: rect.height });
 }
@@ -129,6 +144,7 @@ function updateToolAvailability() {
 function select(systemId) {
   selectedId = systemId;
   selectedAnnotationId = null;
+  selectedForecastPointId = null;
   if (selectedId === null && (tool === 'shape' || tool === 'arrow' || tool === 'add-forecast-point')) {
     setTool('select'); // can't stay in a tool with no owning system
   }
@@ -145,6 +161,12 @@ function selectAnnotation(annotation) {
   selectedId = annotation.systemId;
   selectedAnnotationId = annotation.id;
   updateToolAvailability();
+  renderSidebar();
+  renderMap();
+}
+
+function selectForecastPoint(point) {
+  selectedForecastPointId = point.id;
   renderSidebar();
   renderMap();
 }
@@ -273,11 +295,13 @@ function renderForecastTrackSection(system) {
 
   for (const point of ownPoints) {
     const row = document.createElement('div');
-    row.className = 'forecast-point-row';
+    row.className = `forecast-point-row${point.id === selectedForecastPointId ? ' is-selected' : ''}`;
 
     const label = document.createElement('span');
     label.className = 'forecast-point-label';
     label.textContent = `+${point.hour}h`;
+    label.title = 'Select this point (or drag its dot on the map)';
+    label.addEventListener('click', () => selectForecastPoint(point));
 
     const hourInput = document.createElement('input');
     hourInput.type = 'number';
@@ -286,6 +310,14 @@ function renderForecastTrackSection(system) {
     hourInput.value = point.hour;
     hourInput.placeholder = 'hr';
     hourInput.title = 'Forecast hour';
+
+    const windInput = document.createElement('input');
+    windInput.type = 'number';
+    windInput.min = '0';
+    windInput.step = '1';
+    windInput.value = point.windMph ?? '';
+    windInput.placeholder = 'mph';
+    windInput.title = 'Forecast sustained wind (mph) -- drives the marker\'s intensity symbol';
 
     const spreadInput = document.createElement('input');
     spreadInput.type = 'number';
@@ -300,6 +332,7 @@ function renderForecastTrackSection(system) {
     saveBtn.addEventListener('click', async () => {
       const updated = await api.updateForecastPoint(point.id, {
         hour: hourInput.value === '' ? point.hour : Number(hourInput.value),
+        windMph: windInput.value === '' ? null : Number(windInput.value),
         spreadMi: spreadInput.value === '' ? 0 : Number(spreadInput.value),
       });
       forecastPoints = forecastPoints.map((p) => (p.id === updated.id ? updated : p));
@@ -313,11 +346,12 @@ function renderForecastTrackSection(system) {
     deleteBtn.addEventListener('click', async () => {
       await api.deleteForecastPoint(point.id);
       forecastPoints = forecastPoints.filter((p) => p.id !== point.id);
+      if (selectedForecastPointId === point.id) selectedForecastPointId = null;
       renderSidebar();
       renderMap();
     });
 
-    row.append(label, hourInput, spreadInput, saveBtn, deleteBtn);
+    row.append(label, hourInput, windInput, spreadInput, saveBtn, deleteBtn);
     wrap.append(row);
   }
 
@@ -679,13 +713,15 @@ async function handleDrawClick(geo, event) {
 function setupPointerHandling() {
   let gesture = null;
   // kinds: 'point' (drag marker) | 'vertex' (drag annotation vertex) |
-  // 'annotation' (click an annotation's fill/line) | 'blank' (click/pan empty space)
+  // 'annotation' (click an annotation's fill/line) |
+  // 'forecast-point' (drag/select a track point) | 'blank' (click/pan empty space)
 
   svg.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
     const vertexHit = event.target.closest?.('[data-vertex-index]');
     const annotationHit = event.target.closest?.('[data-annotation-id]');
     const systemHit = event.target.closest?.('[data-system-id]');
+    const forecastPointHit = event.target.closest?.('[data-forecast-point-id]');
 
     if (tool === 'select' && vertexHit) {
       gesture = {
@@ -699,6 +735,9 @@ function setupPointerHandling() {
       gesture = { kind: 'annotation', annotationId: annotationHit.dataset.annotationId, downX: event.clientX, downY: event.clientY };
     } else if (tool === 'select' && systemHit) {
       gesture = { kind: 'point', id: systemHit.dataset.systemId, downX: event.clientX, downY: event.clientY, moved: false };
+      svg.setPointerCapture?.(event.pointerId);
+    } else if (tool === 'select' && forecastPointHit) {
+      gesture = { kind: 'forecast-point', id: forecastPointHit.dataset.forecastPointId, downX: event.clientX, downY: event.clientY, moved: false };
       svg.setPointerCapture?.(event.pointerId);
     } else {
       gesture = { kind: 'blank', downX: event.clientX, downY: event.clientY };
@@ -725,6 +764,18 @@ function setupPointerHandling() {
       const ann = annotations.find((a) => a.id === gesture.annotationId);
       if (!ann) return;
       ann.points[gesture.vertexIndex] = geoAtClient(event, svg.getBoundingClientRect());
+      renderMap();
+      return;
+    }
+    if (gesture?.kind === 'forecast-point') {
+      const dist = Math.hypot(event.clientX - gesture.downX, event.clientY - gesture.downY);
+      if (dist <= 4) return;
+      gesture.moved = true;
+      const point = forecastPoints.find((p) => p.id === gesture.id);
+      if (!point) return;
+      const geo = geoAtClient(event, svg.getBoundingClientRect());
+      point.lat = geo.lat;
+      point.lon = geo.lon;
       renderMap();
       return;
     }
@@ -772,6 +823,19 @@ function setupPointerHandling() {
       return;
     }
 
+    if (current.kind === 'forecast-point') {
+      const point = forecastPoints.find((p) => p.id === current.id);
+      if (current.moved && point) {
+        const updated = await api.updateForecastPoint(point.id, { lat: point.lat, lon: point.lon });
+        forecastPoints = forecastPoints.map((p) => (p.id === updated.id ? updated : p));
+        renderSidebar();
+        renderMap();
+      } else if (point) {
+        selectForecastPoint(point);
+      }
+      return;
+    }
+
     // Blank space: a real drag here was a pan (navigation.js already moved
     // the camera) -- only act on it if it was a plain click.
     const dist = Math.hypot(event.clientX - current.downX, event.clientY - current.downY);
@@ -805,7 +869,8 @@ async function init() {
       tool !== 'create-disturbance' && tool !== 'shape' && tool !== 'arrow' && tool !== 'add-forecast-point' &&
       !event.target.closest?.('[data-system-id]') &&
       !event.target.closest?.('[data-annotation-id]') &&
-      !event.target.closest?.('[data-vertex-index]'),
+      !event.target.closest?.('[data-vertex-index]') &&
+      !event.target.closest?.('[data-forecast-point-id]'),
   });
 
   setupPointerHandling();
