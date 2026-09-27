@@ -108,18 +108,40 @@ are hidden (the rows aren't deleted, just no longer shown or drawable)
 and its forecast track takes over as its visual representation. Place
 forecast points (Add Forecast Point button) at increasing lead-time
 hours, each with an editable forecast hour, forecast sustained wind, and
-cone "spread" (radius, in miles); the map draws an NHC-style cone of
-uncertainty and track line through the system's current position and
-every forecast point, with the usual Day 1-3 solid cone and a lighter
-Day 4-5 continuation once a point passes 72 hours. Each forecast point
-also gets a dot marker with its lead-time hour and a one-character
-intensity symbol (D/S/1-5, the same category scale as the system's own
-classification, computed from that point's forecast wind held against
-the system's current gust/radius/pressure) once its wind is filled in.
-Forecast points are selectable and draggable directly on the map, the
-same as the system's own marker, in addition to editing them by hand in
-the sidebar. Only the selected system's cone/track renders, to keep the
-map readable.
+cone "spread" (radius, in miles) — either typed in the sidebar or set by
+dragging a handle right on the map, next to the selected point. The map
+draws an NHC-style cone of uncertainty and track line through the
+system's current position and every forecast point, with a black-
+outlined Day 1-3 solid cone and a white-outlined Day 4-5 continuation
+once a point passes 72 hours. Each forecast point also gets a dot marker
+with its lead-time hour and a one-character intensity symbol (D/S/1-5,
+the same category scale as the system's own classification, computed
+from that point's forecast wind held against the system's current
+gust/gale-radius/pressure) once its wind is filled in. Forecast points
+are selectable and draggable directly on the map, the same as the
+system's own marker, regardless of which toolbar tool is active — only a
+click on truly blank space is tool-dependent (place/draw vs. pan or
+deselect), so there's no need to keep switching back to Select just to
+reposition something or pan the view. Only the selected system's
+cone/track renders, to keep the map readable.
+
+Each forecast point's hour can be scheduled Auto (the next open slot at
+the system's default interval — 6h/12h/24h, picked in the Forecast track
+section), Manual (a typed hour, with later auto points stepping forward
+from it), or Override (a one-off gap after that point only, independent
+of the system's default interval). Adding, deleting, or rescheduling any
+point recomputes every point's hour in sequence order, so a change to an
+earlier point ripples forward through the auto points after it without
+ever moving an earlier one.
+
+A selected system's current position also carries a wind field: NE/SE/SW/
+NW quadrant radii for gale-force and hurricane-force winds, each
+independently draggable on the map (a 2-button toggle picks which
+threshold's handles are active, with a live mile readout next to each
+one), rendered as a smoothed envelope rather than a hard-cornered
+diamond. This replaced the old single "gale radius" number field — the
+intensity calculator now averages the four gale quadrants for that part
+of its formula.
 
 Advisories, downgrading and the rest of the full classification workflow,
 watches/warnings, and auth are still later milestones on top of this same
