@@ -63,6 +63,7 @@ let selectedAnnotationId = null;
 let forecastPoints = [];
 let selectedForecastPointId = null;
 let currentUser = null; // {id, username, displayName, role} | null -- from api.me()
+let advisories = [];
 let activeWindThreshold = 'gale'; // 'gale' | 'hfw' -- which quadrant handles are shown/draggable
 let drawingSession = null; // { systemId, type: 'shape'|'arrow', points: [{lon,lat}] } | null
 let lastDrawClick = null; // { x, y, t } -- manual double-click detection for the arrow tool
@@ -578,6 +579,69 @@ function renderForecastTrackSection(system) {
   selectedPanelEl.append(wrap);
 }
 
+const ADVISORY_CANCEL_WINDOW_MS = 60 * 60 * 1000; // mirrors server/src/advisories.js's CANCEL_WINDOW_MS
+function isAdvisoryCancelable(advisory) {
+  return Date.now() < new Date(advisory.issuedAt).getTime() + ADVISORY_CANCEL_WINDOW_MS;
+}
+
+function renderAdvisoriesSection(system) {
+  const own = advisories.filter((a) => a.systemId === system.id).sort((a, b) => b.number - a.number);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'annotations-section';
+  const heading = document.createElement('h4');
+  heading.textContent = 'Advisories';
+  wrap.append(heading);
+
+  const canPublish = hasRole(currentUser, 'forecaster');
+  const publishBtn = document.createElement('button');
+  publishBtn.textContent = 'Publish Advisory';
+  publishBtn.className = 'primary';
+  publishBtn.disabled = !canPublish;
+  publishBtn.title = !currentUser ? 'Log in to make changes' : (canPublish ? '' : 'Requires Forecaster role or higher');
+  publishBtn.addEventListener('click', async () => {
+    if (!confirm(`Publish advisory #${own.length + 1} for ${displayLabel(system)}? This creates a permanent record of its current data and forecast track.`)) return;
+    const created = await api.createAdvisory(system.id, {});
+    advisories = [...advisories, created];
+    renderSidebar();
+  });
+  wrap.append(publishBtn);
+
+  if (own.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-hint';
+    empty.textContent = 'None published yet.';
+    wrap.append(empty);
+  } else {
+    for (const advisory of own) {
+      const row = document.createElement('div');
+      row.className = 'account-user-row';
+      const name = document.createElement('span');
+      name.className = 'account-user-row__name';
+      name.textContent = `Advisory #${advisory.number} — ${new Date(advisory.issuedAt).toLocaleString()}`;
+      row.append(name);
+
+      if (isAdvisoryCancelable(advisory)) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.className = 'danger';
+        cancelBtn.disabled = !canPublish;
+        cancelBtn.title = canPublish ? 'Emergency-cancel: fully deletes this advisory (only available for 1 hour after publishing)' : 'Requires Forecaster role or higher';
+        cancelBtn.addEventListener('click', async () => {
+          if (!confirm(`Emergency-cancel Advisory #${advisory.number}? This permanently deletes it. This cannot be undone.`)) return;
+          await api.cancelAdvisory(advisory.id);
+          advisories = advisories.filter((a) => a.id !== advisory.id);
+          renderSidebar();
+        });
+        row.append(cancelBtn);
+      }
+      wrap.append(row);
+    }
+  }
+
+  selectedPanelEl.append(wrap);
+}
+
 // Which quadrant handles (NE/SE/SW/NW) are currently shown/draggable on
 // the map for the selected system's wind field -- a 2-button toggle,
 // since only one threshold's handles are ever edited at a time (both
@@ -822,6 +886,7 @@ function renderSelectedPanel() {
     systems = systems.filter((s) => s.id !== system.id);
     annotations = annotations.filter((a) => a.systemId !== system.id);
     forecastPoints = forecastPoints.filter((p) => p.systemId !== system.id);
+    advisories = advisories.filter((a) => a.systemId !== system.id);
     select(null);
   });
 
@@ -833,6 +898,7 @@ function renderSelectedPanel() {
   renderIntensitySection(system, { windInput, gustInput, pressureInput });
   if (system.classified) {
     renderForecastTrackSection(system);
+    renderAdvisoriesSection(system);
   } else {
     renderAnnotationsSection(system);
   }
@@ -1267,8 +1333,8 @@ async function init() {
   await detectBackend();
   document.getElementById('local-mode-banner').hidden = !api.isLocalOnly();
 
-  [systems, annotations, forecastPoints, currentUser] = await Promise.all([
-    api.listSystems(), api.listAnnotations(), api.listForecastPoints(),
+  [systems, annotations, forecastPoints, advisories, currentUser] = await Promise.all([
+    api.listSystems(), api.listAnnotations(), api.listForecastPoints(), api.listAdvisories(),
     api.me().then((r) => r.user),
   ]);
   updateToolAvailability();

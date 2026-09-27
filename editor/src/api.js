@@ -51,6 +51,10 @@ const remote = {
   listUsers: () => request('/users'),
   createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
   updateUserRole: (id, role) => request(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+
+  listAdvisories: () => request('/advisories'),
+  createAdvisory: (systemId, data) => request(`/systems/${systemId}/advisories`, { method: 'POST', body: JSON.stringify(data ?? {}) }),
+  cancelAdvisory: (id) => request(`/advisories/${id}`, { method: 'DELETE' }),
 };
 
 // --- local fallback (browser localStorage, no server available) ---
@@ -273,6 +277,20 @@ const local = {
   async updateUserRole() {
     throw new Error('Accounts are not available in local-only mode.');
   },
+
+  // Advisories require a logged-in Forecaster+ user to issue, and
+  // local-only mode's me() always resolves logged-out -- so the
+  // publish/cancel UI is never reachable here in the first place; these
+  // stand-ins just keep the shape consistent.
+  async listAdvisories() {
+    return [];
+  },
+  async createAdvisory() {
+    throw new Error('Advisories are not available in local-only mode.');
+  },
+  async cancelAdvisory() {
+    throw new Error('Advisories are not available in local-only mode.');
+  },
 };
 
 // --- pick a backend once, at startup ---
@@ -312,5 +330,8 @@ export const api = {
   listUsers: (...args) => impl().listUsers(...args),
   createUser: (...args) => impl().createUser(...args),
   updateUserRole: (...args) => impl().updateUserRole(...args),
+  listAdvisories: (...args) => impl().listAdvisories(...args),
+  createAdvisory: (...args) => impl().createAdvisory(...args),
+  cancelAdvisory: (...args) => impl().cancelAdvisory(...args),
   isLocalOnly: () => backend === 'local',
 };

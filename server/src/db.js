@@ -112,3 +112,18 @@ db.exec(`
     UNIQUE (season, sequence)
   )
 `);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS advisories (
+    id TEXT PRIMARY KEY,
+    system_id TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+    number INTEGER NOT NULL,
+    headline TEXT,
+    discussion TEXT,
+    snapshot_json TEXT NOT NULL,
+    issued_at TEXT NOT NULL,
+    issued_by_user_id TEXT NOT NULL REFERENCES users(id)
+  )
+`);
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_advisories_system_id ON advisories(system_id)');

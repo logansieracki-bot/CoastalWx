@@ -31,7 +31,7 @@ function averageRadius(ne, se, sw, nw) {
   return quadrants.reduce((sum, v) => sum + (v ?? 0), 0) / 4;
 }
 
-function toApi(row) {
+export function toApi(row) {
   return {
     id: row.id,
     season: row.season,

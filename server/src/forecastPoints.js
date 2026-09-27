@@ -8,7 +8,7 @@ function nextSequence(systemId) {
   return (row.maxSeq ?? 0) + 1;
 }
 
-function toApi(row) {
+export function toApi(row) {
   return {
     id: row.id,
     systemId: row.system_id,

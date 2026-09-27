@@ -5,6 +5,7 @@ import { systemsRouter } from './systems.js';
 import { annotationsRouter } from './annotations.js';
 import { forecastPointsRouter } from './forecastPoints.js';
 import { authRouter } from './auth.js';
+import { advisoriesRouter } from './advisories.js';
 import { startBackupSchedule } from './backup.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -16,6 +17,7 @@ app.use('/api', authRouter);
 app.use('/api', systemsRouter);
 app.use('/api', annotationsRouter);
 app.use('/api', forecastPointsRouter);
+app.use('/api', advisoriesRouter);
 app.use(express.static(EDITOR_DIR));
 
 const PORT = process.env.PORT || 3000;
