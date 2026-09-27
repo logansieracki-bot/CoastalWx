@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NorEASterCaster Editor</title>
+<title>Tempest Coast — Forecaster Tools</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Ccircle%20cx='16'%20cy='16'%20r='15'%20fill='%230b1f3a'/%3E%3Ctext%20x='16'%20y='22'%20font-size='17'%20font-family='system-ui,sans-serif'%20font-weight='700'%20fill='%23ffffff'%20text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -12,57 +12,68 @@
   <div id="local-mode-banner" class="local-mode-banner" hidden>
     LOCAL-ONLY MODE — no backend server reachable, so changes are saved in this browser only (not shared, not persisted elsewhere). Run the real server (see README) for shared, durable storage.
   </div>
-  <div id="auth-bar" class="auth-bar">
-    <form id="login-form" class="login-form" hidden>
+  <div id="login-gate" class="login-gate" hidden>
+    <form id="login-form" class="login-card">
+      <span class="login-card__mark">L</span>
+      <h1>Tempest Coast</h1>
+      <p class="login-card__subtitle">Forecaster sign-in</p>
       <input type="text" id="login-username" placeholder="Username" autocomplete="username" required>
       <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required>
-      <button type="submit">Log in</button>
+      <button type="submit" class="primary">Log in</button>
       <span id="login-error" class="login-error"></span>
     </form>
-    <div id="user-status" class="user-status" hidden>
-      <span id="user-status-label"></span>
-      <button id="logout-btn">Log out</button>
-    </div>
+    <p id="login-gate-local-notice" class="login-gate__notice" hidden>
+      This is the local-only demo (see the banner above) -- there's no
+      backend here to hold real accounts, so sign-in isn't available. The
+      editor below is fully usable anyway, saving to this browser only.
+    </p>
   </div>
-  <header class="toolbar">
-    <div class="toolbar__title">
-      <strong>NorEASterCaster Editor</strong>
-      <span>Disturbances &middot; Shapes &middot; Arrows</span>
-    </div>
-    <div class="tool-group">
-      <button data-tool="select" class="is-active">Select / Move</button>
-      <button data-tool="create-disturbance" data-requires-auth>Create Disturbance</button>
-      <button data-tool="shape" data-requires-auth data-requires-selection disabled title="Select a system first">Draw Shape</button>
-      <button data-tool="arrow" data-requires-auth data-requires-selection disabled title="Select a system first">Draw Arrow</button>
-      <button data-tool="add-forecast-point" data-requires-auth data-requires-classification disabled title="Classify a system first">Add Forecast Point</button>
-    </div>
-    <button id="deselect-btn">Deselect</button>
-    <span id="placement-hint" class="placement-hint" hidden></span>
-    <div class="toolbar__spacer"></div>
-    <button id="reset-view-btn">Reset View</button>
-  </header>
 
-  <div class="workspace">
-    <aside class="sidebar">
-      <section class="panel-section">
-        <h2>Systems</h2>
-        <ul id="systems-list" class="systems-list"></ul>
-      </section>
+  <div id="editor-shell" class="editor-shell" hidden>
+    <header class="toolbar">
+      <div class="toolbar__title">
+        <strong>Tempest Coast</strong>
+        <span>Forecaster editor</span>
+      </div>
+      <div class="tool-group">
+        <button data-tool="select" class="is-active">Select / Move</button>
+        <button data-tool="create-disturbance">Create Disturbance</button>
+        <button data-tool="shape" data-requires-selection disabled title="Select a system first">Draw Shape</button>
+        <button data-tool="arrow" data-requires-selection disabled title="Select a system first">Draw Arrow</button>
+        <button data-tool="add-forecast-point" data-requires-classification disabled title="Classify a system first">Add Forecast Point</button>
+      </div>
+      <button id="deselect-btn">Deselect</button>
+      <span id="placement-hint" class="placement-hint" hidden></span>
+      <div class="toolbar__spacer"></div>
+      <div id="user-status" class="user-status" hidden>
+        <span id="user-status-label"></span>
+        <button id="logout-btn">Log out</button>
+      </div>
+      <button id="reset-view-btn">Reset View</button>
+    </header>
 
-      <section class="panel-section">
-        <h2>Selected System</h2>
-        <p id="empty-hint" class="empty-hint">Select a system, or use Create Disturbance to add one.</p>
-        <div id="selected-panel" hidden></div>
-      </section>
+    <div class="workspace">
+      <aside class="sidebar">
+        <section class="panel-section">
+          <h2>Systems</h2>
+          <ul id="systems-list" class="systems-list"></ul>
+        </section>
 
-      <section id="account-panel-section" class="panel-section" hidden>
-        <h2>Accounts</h2>
-        <div id="account-panel"></div>
-      </section>
-    </aside>
+        <section class="panel-section">
+          <h2>Selected System</h2>
+          <p id="empty-hint" class="empty-hint">Select a system, or use Create Disturbance to add one.</p>
+          <div id="selected-panel" hidden></div>
+        </section>
 
-    <div id="map-wrap" class="map-wrap">
-      <svg id="map"></svg>
+        <section id="account-panel-section" class="panel-section" hidden>
+          <h2>Accounts</h2>
+          <div id="account-panel"></div>
+        </section>
+      </aside>
+
+      <div id="map-wrap" class="map-wrap">
+        <svg id="map"></svg>
+      </div>
     </div>
   </div>
 </div>

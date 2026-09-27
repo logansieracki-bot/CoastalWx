@@ -22,14 +22,16 @@ const emptyHintEl = document.getElementById('empty-hint');
 const toolButtons = document.querySelectorAll('[data-tool]');
 const drawToolButtons = document.querySelectorAll('[data-requires-selection]');
 const classifyToolButtons = document.querySelectorAll('[data-requires-classification]');
-const authToolButtons = document.querySelectorAll('[data-requires-auth]');
 const deselectBtn = document.getElementById('deselect-btn');
 const resetViewBtn = document.getElementById('reset-view-btn');
 const placementHint = document.getElementById('placement-hint');
+const loginGateEl = document.getElementById('login-gate');
+const editorShellEl = document.getElementById('editor-shell');
 const loginForm = document.getElementById('login-form');
 const loginUsernameInput = document.getElementById('login-username');
 const loginPasswordInput = document.getElementById('login-password');
 const loginErrorEl = document.getElementById('login-error');
+const loginGateLocalNoticeEl = document.getElementById('login-gate-local-notice');
 const userStatusEl = document.getElementById('user-status');
 const userStatusLabelEl = document.getElementById('user-status-label');
 const logoutBtn = document.getElementById('logout-btn');
@@ -47,6 +49,13 @@ function hasRole(user, minRole) {
 }
 function roleLabel(role) {
   return { owner: 'Owner', admin: 'Admin', forecaster: 'Forecaster', junior_forecaster: 'Junior Forecaster' }[role] ?? role;
+}
+// Local-only mode (no backend reachable, e.g. the GitHub Pages demo) has no
+// real account system at all -- every role check is bypassed there so the
+// local sandbox stays fully usable solo, matching its pre-accounts
+// behavior. Against a real backend, this is a real role check.
+function canWriteRole(minRole) {
+  return api.isLocalOnly() || hasRole(currentUser, minRole);
 }
 
 const TOOL_HINTS = {
@@ -126,6 +135,10 @@ function visibleAnnotations() {
 
 function renderMap() {
   const rect = svg.getBoundingClientRect();
+  // The map has zero size while it's behind the login gate (display:none
+  // ancestor) -- nothing to draw yet, and computing bounds against a
+  // zero-size viewport throws. updateAuthGate() re-renders once it's shown.
+  if (rect.width === 0 || rect.height === 0) return;
   const bounds = currentBounds();
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
   trackConeRenderer.render({ points: selectedSystemTrackPoints(), selectedForecastPointId, bounds, width: rect.width, height: rect.height });
@@ -158,32 +171,41 @@ function setTool(next) {
 // Add Forecast Point starts being available.
 function updateToolAvailability() {
   const system = systems.find((s) => s.id === selectedId);
-  for (const btn of authToolButtons) {
-    btn.disabled = !currentUser;
-    btn.title = currentUser ? '' : 'Log in to make changes';
-  }
   for (const btn of drawToolButtons) {
-    if (!currentUser) continue; // already disabled by the auth pass above
     btn.disabled = selectedId === null || !!system?.classified;
     btn.title = selectedId === null
       ? 'Select a system first'
       : (system?.classified ? "Not available once classified -- use the forecast track instead" : '');
   }
   for (const btn of classifyToolButtons) {
-    if (!currentUser) continue;
     btn.disabled = !system?.classified;
     btn.title = system?.classified ? '' : 'Classify a system first';
   }
 }
 
-function renderAuthBar() {
-  loginForm.hidden = !!currentUser;
+// The whole editor is behind this gate: nothing of it (map, toolbar,
+// sidebar) is visible until you're logged in. Local-only mode (no backend
+// reachable) is the one exception -- there's no real account system to log
+// into there at all, so it bypasses the gate entirely and shows the editor
+// directly, same as it always has.
+function updateAuthGate() {
+  const localOnly = api.isLocalOnly();
+  const showEditor = localOnly || !!currentUser;
+  loginGateEl.hidden = showEditor;
+  editorShellEl.hidden = !showEditor;
+
+  loginForm.hidden = localOnly; // sign-in can never succeed with no backend
+  loginGateLocalNoticeEl.hidden = !localOnly;
+
   userStatusEl.hidden = !currentUser;
   if (currentUser) {
     userStatusLabelEl.innerHTML = `Logged in as <strong>${currentUser.displayName}</strong> (${roleLabel(currentUser.role)})`;
   }
-  accountPanelSectionEl.hidden = !hasRole(currentUser, 'admin');
-  if (hasRole(currentUser, 'admin')) renderAccountPanel();
+  // Accounts are a real-backend concept through and through (there's
+  // nothing to manage locally) -- never bypassed by local-only mode, unlike
+  // canWriteRole()'s ordinary forecasting actions.
+  accountPanelSectionEl.hidden = localOnly || !hasRole(currentUser, 'admin');
+  if (!localOnly && hasRole(currentUser, 'admin')) renderAccountPanel();
 }
 
 // Owner/Admin-only account list + creation form -- Owner additionally gets
@@ -399,8 +421,6 @@ function renderAnnotationsSection(system) {
   const deleteBtn = document.createElement('button');
   deleteBtn.textContent = 'Delete shape/arrow';
   deleteBtn.className = 'danger';
-  deleteBtn.disabled = !currentUser;
-  deleteBtn.title = currentUser ? '' : 'Log in to make changes';
   deleteBtn.addEventListener('click', async () => {
     if (!confirm(`Delete this ${selectedAnn.type}? This cannot be undone.`)) return;
     await api.deleteAnnotation(selectedAnn.id);
@@ -461,7 +481,6 @@ function renderForecastTrackSection(system) {
     intervalSelect.append(opt);
   }
   intervalSelect.value = String(system.forecastInterval);
-  intervalSelect.disabled = !currentUser;
   intervalSelect.addEventListener('change', async () => {
     const updatedSystem = await api.updateSystem(system.id, { forecastInterval: Number(intervalSelect.value) });
     systems = systems.map((s) => (s.id === updatedSystem.id ? updatedSystem : s));
@@ -505,7 +524,6 @@ function renderForecastTrackSection(system) {
       modeSelect.append(optionEl);
     }
     modeSelect.value = point.hourMode === 'override' ? `override:${point.hourOverride}` : (point.hourMode || 'auto');
-    modeSelect.disabled = !currentUser;
 
     const hourInput = document.createElement('input');
     hourInput.type = 'number';
@@ -518,7 +536,7 @@ function renderForecastTrackSection(system) {
       // Only a manually-scheduled hour is ever directly editable -- auto
       // and override hours are computed by syncForecastSchedule from the
       // interval/gap instead.
-      hourInput.disabled = modeSelect.value !== 'manual' || !currentUser;
+      hourInput.disabled = modeSelect.value !== 'manual';
     }
     modeSelect.addEventListener('change', updateHourInputState);
     updateHourInputState();
@@ -530,7 +548,6 @@ function renderForecastTrackSection(system) {
     windInput.value = point.windMph ?? '';
     windInput.placeholder = 'mph';
     windInput.title = 'Forecast sustained wind (mph) -- drives the marker\'s intensity symbol';
-    windInput.disabled = !currentUser;
 
     const spreadInput = document.createElement('input');
     spreadInput.type = 'number';
@@ -539,11 +556,9 @@ function renderForecastTrackSection(system) {
     spreadInput.value = point.spreadMi;
     spreadInput.placeholder = 'mi';
     spreadInput.title = 'Cone spread (mi)';
-    spreadInput.disabled = !currentUser;
 
     const saveBtn = document.createElement('button');
     saveBtn.textContent = 'Save';
-    saveBtn.disabled = !currentUser;
     saveBtn.addEventListener('click', async () => {
       const [mode, overrideStep] = modeSelect.value.split(':');
       const updated = await api.updateForecastPoint(point.id, {
@@ -562,7 +577,6 @@ function renderForecastTrackSection(system) {
     const deleteBtn = document.createElement('button');
     deleteBtn.textContent = 'Delete';
     deleteBtn.className = 'danger';
-    deleteBtn.disabled = !currentUser;
     deleteBtn.addEventListener('click', async () => {
       await api.deleteForecastPoint(point.id);
       forecastPoints = forecastPoints.filter((p) => p.id !== point.id);
@@ -593,12 +607,16 @@ function renderAdvisoriesSection(system) {
   heading.textContent = 'Advisories';
   wrap.append(heading);
 
-  const canPublish = hasRole(currentUser, 'forecaster');
+  // Advisories are an inherently real-backend concept (an immutable record
+  // tied to a real issuing account) -- unlike ordinary forecasting actions,
+  // this is never bypassed for local-only mode.
+  const localOnly = api.isLocalOnly();
+  const canPublish = !localOnly && hasRole(currentUser, 'forecaster');
   const publishBtn = document.createElement('button');
   publishBtn.textContent = 'Publish Advisory';
   publishBtn.className = 'primary';
   publishBtn.disabled = !canPublish;
-  publishBtn.title = !currentUser ? 'Log in to make changes' : (canPublish ? '' : 'Requires Forecaster role or higher');
+  publishBtn.title = localOnly ? 'Advisories require the real hosted backend -- not available in local-only mode' : (canPublish ? '' : 'Requires Forecaster role or higher');
   publishBtn.addEventListener('click', async () => {
     if (!confirm(`Publish advisory #${own.length + 1} for ${displayLabel(system)}? This creates a permanent record of its current data and forecast track.`)) return;
     const created = await api.createAdvisory(system.id, {});
@@ -626,7 +644,7 @@ function renderAdvisoriesSection(system) {
         cancelBtn.textContent = 'Cancel';
         cancelBtn.className = 'danger';
         cancelBtn.disabled = !canPublish;
-        cancelBtn.title = canPublish ? 'Emergency-cancel: fully deletes this advisory (only available for 1 hour after publishing)' : 'Requires Forecaster role or higher';
+        cancelBtn.title = canPublish ? 'Emergency-cancel: fully deletes this advisory (only available for 1 hour after publishing)' : (localOnly ? 'Advisories require the real hosted backend' : 'Requires Forecaster role or higher');
         cancelBtn.addEventListener('click', async () => {
           if (!confirm(`Emergency-cancel Advisory #${advisory.number}? This permanently deletes it. This cannot be undone.`)) return;
           await api.cancelAdvisory(advisory.id);
@@ -741,11 +759,11 @@ function renderIntensitySection(system, { windInput, gustInput, pressureInput })
       system.galeRadiusMi != null && system.pressureMb != null;
     const classifyBtn = document.createElement('button');
     classifyBtn.textContent = 'Classify';
-    const canClassifyRole = hasRole(currentUser, 'forecaster');
+    const canClassifyRole = canWriteRole('forecaster');
     classifyBtn.disabled = !canClassify || !canClassifyRole;
-    classifyBtn.title = !currentUser
-      ? 'Log in to make changes'
-      : (!canClassifyRole ? 'Requires Forecaster role or higher' : (canClassify ? '' : 'Investigate it, mark it Formed, and save wind/gust/radius/pressure first.'));
+    classifyBtn.title = !canClassifyRole
+      ? 'Requires Forecaster role or higher'
+      : (canClassify ? '' : 'Investigate it, mark it Formed, and save wind/gust/radius/pressure first.');
     classifyBtn.addEventListener('click', async () => {
       const key = intensityCategoryKey(intensityScore(system));
       const label = key ? CATEGORY_INFO[key].label : 'a category';
@@ -779,8 +797,7 @@ function renderSelectedPanel() {
   const formedBtn = document.createElement('button');
   formedBtn.className = `formed-toggle${system.formed ? ' is-active' : ''}`;
   formedBtn.textContent = system.formed ? 'Formed' : 'Not Formed';
-  formedBtn.disabled = !currentUser;
-  formedBtn.title = currentUser ? 'Has a closed circulation physically formed? Click to toggle.' : 'Log in to make changes';
+  formedBtn.title = 'Has a closed circulation physically formed? Click to toggle.';
   formedBtn.addEventListener('click', async () => {
     const updated = await api.updateSystem(system.id, { formed: !system.formed });
     systems = systems.map((s) => (s.id === updated.id ? updated : s));
@@ -841,8 +858,6 @@ function renderSelectedPanel() {
   const saveBtn = document.createElement('button');
   saveBtn.textContent = 'Save';
   saveBtn.className = 'primary';
-  saveBtn.disabled = !currentUser;
-  saveBtn.title = currentUser ? '' : 'Log in to make changes';
   saveBtn.addEventListener('click', async () => {
     const updated = await api.updateSystem(system.id, {
       formationProbability2dayPct: prob2Input.value === '' ? null : Number(prob2Input.value),
@@ -861,11 +876,11 @@ function renderSelectedPanel() {
   if (system.stage !== 'invest') {
     investigateBtn = document.createElement('button');
     investigateBtn.textContent = 'Investigate';
-    const canInvestigateRole = hasRole(currentUser, 'forecaster');
+    const canInvestigateRole = canWriteRole('forecaster');
     investigateBtn.disabled = !system.formed || !canInvestigateRole;
-    investigateBtn.title = !currentUser
-      ? 'Log in to make changes'
-      : (!canInvestigateRole ? 'Requires Forecaster role or higher' : (system.formed ? '' : 'Mark it Formed first.'));
+    investigateBtn.title = !canInvestigateRole
+      ? 'Requires Forecaster role or higher'
+      : (system.formed ? '' : 'Mark it Formed first.');
     investigateBtn.addEventListener('click', async () => {
       if (!confirm(`Investigate ${system.displayName}? It will become an Invest.`)) return;
       const updated = await api.updateSystem(system.id, { stage: 'invest' });
@@ -877,9 +892,9 @@ function renderSelectedPanel() {
   const deleteBtn = document.createElement('button');
   deleteBtn.textContent = 'Delete';
   deleteBtn.className = 'danger';
-  const canDeleteRole = hasRole(currentUser, 'forecaster');
+  const canDeleteRole = canWriteRole('forecaster');
   deleteBtn.disabled = !canDeleteRole;
-  deleteBtn.title = !currentUser ? 'Log in to make changes' : (canDeleteRole ? '' : 'Requires Forecaster role or higher');
+  deleteBtn.title = canDeleteRole ? '' : 'Requires Forecaster role or higher';
   deleteBtn.addEventListener('click', async () => {
     if (!confirm(`Delete ${system.displayName}? This cannot be undone.`)) return;
     await api.deleteSystem(system.id);
@@ -1309,9 +1324,11 @@ async function init() {
       currentUser = user;
       loginUsernameInput.value = '';
       loginPasswordInput.value = '';
-      updateToolAvailability();
-      renderAuthBar();
+      updateAuthGate();
       renderSidebar();
+      // The map was zero-size (and skipped rendering) while behind the
+      // gate -- now that it's visible, it needs its first real render.
+      renderMap();
     } catch (err) {
       loginErrorEl.textContent = err.message === 'invalid_credentials' ? 'Incorrect username or password.' : err.message;
     }
@@ -1320,8 +1337,7 @@ async function init() {
   logoutBtn.addEventListener('click', async () => {
     await api.logout();
     currentUser = null;
-    updateToolAvailability();
-    renderAuthBar();
+    updateAuthGate();
     renderSidebar();
   });
 
@@ -1338,7 +1354,7 @@ async function init() {
     api.me().then((r) => r.user),
   ]);
   updateToolAvailability();
-  renderAuthBar();
+  updateAuthGate();
   setTool('select');
   renderSidebar();
   renderMap();

@@ -37,21 +37,45 @@ h3 { margin: 0 0 4px; font-size: 14px; }
 }
 .local-mode-banner[hidden] { display: none; }
 
-.auth-bar {
-  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
-  padding: 6px 14px; background: #f7f9fc; border-bottom: 1px solid var(--ui-border);
-  font-size: 12.5px;
+/* Full-screen gate: nothing of the editor (toolbar/sidebar/map) exists in
+   the page's visible layout until this is hidden -- login-gate and
+   editor-shell are always exact opposites of each other (see
+   updateAuthGate() in main.js), never both visible. */
+.editor-shell { height: 100%; display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.editor-shell[hidden], .login-gate[hidden] { display: none; }
+
+.login-gate {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; padding: 20px;
+  background: radial-gradient(circle at 50% 0%, #16324f 0%, #0b1f3a 60%, #071527 100%);
 }
-.login-form { display: flex; align-items: center; gap: 6px; }
-.login-form[hidden], .user-status[hidden] { display: none; }
-.login-form input {
-  border: 1px solid var(--ui-border); border-radius: 7px; padding: 5px 8px; font-size: 12.5px; width: 120px;
+.login-card {
+  width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 10px;
+  background: #fff; border-radius: 16px; padding: 28px 26px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  text-align: center;
 }
-.login-form button { padding: 5px 10px; font-size: 12.5px; }
-.login-error { color: var(--ui-danger); font-weight: 600; }
+.login-card__mark {
+  align-self: center; display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: 12px; margin-bottom: 4px;
+  background: #0b1f3a; color: #fff; font-weight: 800; font-size: 19px;
+}
+.login-card h1 { margin: 0; font-size: 19px; }
+.login-card__subtitle { margin: 0 0 6px; color: var(--ui-muted); font-size: 13px; }
+.login-card input {
+  border: 1px solid var(--ui-border); border-radius: 9px; padding: 10px 12px; font-size: 14px; width: 100%;
+}
+.login-card button { padding: 10px; font-size: 14px; margin-top: 4px; }
+.login-error { color: var(--ui-danger); font-weight: 600; font-size: 12.5px; min-height: 1em; }
+.login-gate__notice {
+  max-width: 360px; text-align: center; color: #cfe0ff; font-size: 13px; line-height: 1.5; margin: 0;
+}
+.login-gate__notice[hidden] { display: none; }
+
 .user-status { display: flex; align-items: center; gap: 8px; }
+.user-status[hidden] { display: none; }
 .user-status button { padding: 5px 10px; font-size: 12.5px; }
-#user-status-label { color: var(--ui-muted); font-weight: 600; }
+#user-status-label { color: var(--ui-muted); font-weight: 600; font-size: 12.5px; }
 #user-status-label strong { color: var(--ui-text); }
 
 .toolbar {

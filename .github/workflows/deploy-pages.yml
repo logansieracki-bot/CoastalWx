@@ -1,11 +1,13 @@
 name: Deploy to GitHub Pages
 
-# Publishes the editor (map + toolbar + sidebar) at the site root -- it's
-# what this project is actually building. It falls back to browser
-# localStorage when no real backend is reachable (which is always true on
-# Pages, since Pages only serves static files -- no server, no database).
-# The earlier sample-data public forecast page still gets published too,
-# just moved to /forecast/ so it isn't lost.
+# Mirrors the real (Railway) deployment's routing: the public read-only
+# site at the root, the forecaster editor at /editor. Pages only serves
+# static files -- no server, no database, no /api -- so both fall back
+# gracefully: the public page shows clearly-labeled sample data (see its
+# own demo-data fallback in public/src/main.js) and the editor falls back
+# to browser localStorage (with its own honest banner). The earlier
+# sample-data forecast page still gets published too, at /forecast/, so
+# it isn't lost.
 
 on:
   push:
@@ -34,8 +36,9 @@ jobs:
 
       - name: Stage site
         run: |
-          mkdir -p _site/forecast
-          cp -r editor/. _site/
+          mkdir -p _site/editor _site/forecast
+          cp -r public/. _site/
+          cp -r editor/. _site/editor/
           cp index.html _site/forecast/
 
       - name: Configure Pages

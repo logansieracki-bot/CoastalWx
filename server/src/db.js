@@ -102,13 +102,18 @@ db.exec(`
 
 db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)');
 
+// ON DELETE CASCADE here means "delete this row," not "clear the
+// reference" -- deleting a named system removes its storm_names row
+// entirely, which is what keeps the name permanently unavailable rather
+// than freeing it back up for reuse (assignStormName only ever considers
+// rows that still exist).
 db.exec(`
   CREATE TABLE IF NOT EXISTS storm_names (
     id TEXT PRIMARY KEY,
     season INTEGER NOT NULL,
     sequence INTEGER NOT NULL,
     name TEXT NOT NULL,
-    used_by_system_id TEXT REFERENCES systems(id),
+    used_by_system_id TEXT REFERENCES systems(id) ON DELETE CASCADE,
     UNIQUE (season, sequence)
   )
 `);

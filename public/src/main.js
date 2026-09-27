@@ -6,7 +6,7 @@
 // resolve correctly regardless of this module's own served path.
 import {
   INITIAL_BOUNDS, systemColor, displayLabel, intensityScore, intensityCategoryKey,
-  categorySymbol, windOnlyIntensityScore, CATEGORY_INFO,
+  categorySymbol, windOnlyIntensityScore, CATEGORY_INFO, maxFormationProbabilityPct,
 } from '/editor/src/constants.js';
 import { createViewState, getAspectFittedBounds } from '/editor/src/viewState.js';
 import { attachNavigation } from '/editor/src/navigation.js';
@@ -17,20 +17,57 @@ import { createWindFieldRenderer } from '/editor/src/windFieldRenderer.js';
 
 const POLL_INTERVAL_MS = 60000;
 
+// Shown when no backend is reachable at all (e.g. the GitHub Pages static
+// deployment, which has no /api) -- an honest, clearly-labeled stand-in
+// rather than a blank map or a crash, same spirit as the editor's own
+// "LOCAL-ONLY MODE" banner and the original sample-data root page.
+const DEMO_SYSTEMS = [
+  {
+    id: 'demo-1', season: 2025, seasonLabel: '2025-26', sequenceNumber: 1,
+    name: 'Marlowe', displayName: 'Marlowe', stage: 'invest',
+    lat: 38.5, lon: -68.0,
+    formationProbability2dayPct: null, formationProbability5dayPct: null, formationProbability10dayPct: null,
+    pressureMb: 978, windMph: 65, gustMph: 85,
+    galeRadiusNeMi: 220, galeRadiusSeMi: 200, galeRadiusSwMi: 180, galeRadiusNwMi: 190,
+    hurricaneForceRadiusNeMi: 60, hurricaneForceRadiusSeMi: 50, hurricaneForceRadiusSwMi: 40, hurricaneForceRadiusNwMi: 45,
+    galeRadiusMi: 197.5,
+    formed: true, classified: true, forecastInterval: 12,
+  },
+  {
+    id: 'demo-2', season: 2025, seasonLabel: '2025-26', sequenceNumber: 2,
+    name: null, displayName: 'Disturbance 2', stage: 'disturbance',
+    lat: 28, lon: -55,
+    formationProbability2dayPct: 20, formationProbability5dayPct: 50, formationProbability10dayPct: 70,
+    pressureMb: null, windMph: null, gustMph: null,
+    galeRadiusNeMi: null, galeRadiusSeMi: null, galeRadiusSwMi: null, galeRadiusNwMi: null,
+    hurricaneForceRadiusNeMi: null, hurricaneForceRadiusSeMi: null, hurricaneForceRadiusSwMi: null, hurricaneForceRadiusNwMi: null,
+    galeRadiusMi: null,
+    formed: false, classified: false, forecastInterval: 12,
+  },
+];
+const DEMO_FORECAST_POINTS = [
+  { id: 'demo-fp-1', systemId: 'demo-1', sequence: 1, lon: -66.5, lat: 40, hour: 12, windMph: 70, spreadMi: 40, hourMode: 'auto', hourOverride: null },
+  { id: 'demo-fp-2', systemId: 'demo-1', sequence: 2, lon: -64.5, lat: 42, hour: 24, windMph: 60, spreadMi: 70, hourMode: 'auto', hourOverride: null },
+  { id: 'demo-fp-3', systemId: 'demo-1', sequence: 3, lon: -61, lat: 44.5, hour: 36, windMph: 50, spreadMi: 100, hourMode: 'auto', hourOverride: null },
+];
+const DEMO_ADVISORIES = [
+  {
+    id: 'demo-adv-1', systemId: 'demo-1', number: 3, headline: null, discussion: null,
+    issuedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), issuedByUserId: 'demo', cancelable: false,
+  },
+];
+
 const svg = document.getElementById('map');
-const emptyStateEl = document.getElementById('empty-state');
-const infoPanelEl = document.getElementById('info-panel');
-const infoCloseBtn = document.getElementById('info-close');
-const infoNameEl = document.getElementById('info-name');
-const infoMetaEl = document.getElementById('info-meta');
-const infoBodyEl = document.getElementById('info-body');
-const advisoryBadgeEl = document.getElementById('advisory-badge');
-const advisoryBadgeTimeEl = document.getElementById('advisory-badge-time');
+const demoBannerEl = document.getElementById('demo-banner');
+const heroStatusEl = document.getElementById('hero-status');
+const systemListEl = document.getElementById('system-list');
+const systemListEmptyEl = document.getElementById('system-list-empty');
 
 let systems = [];
 let forecastPoints = [];
 let advisories = [];
 let selectedId = null;
+let usingDemoData = false;
 let viewState = createViewState(INITIAL_BOUNDS);
 let mapRenderer = null;
 let pointRenderer = null;
@@ -46,18 +83,31 @@ async function loadGeography() {
   return { land, lakes, borders, states };
 }
 
+async function fetchJson(path) {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+  return res.json();
+}
+
 async function loadData() {
-  const [nextSystems, nextForecastPoints, nextAdvisories] = await Promise.all([
-    fetch('/api/systems').then((r) => r.json()),
-    fetch('/api/forecast-points').then((r) => r.json()),
-    fetch('/api/advisories').then((r) => r.json()),
-  ]);
-  systems = nextSystems;
-  forecastPoints = nextForecastPoints;
-  advisories = nextAdvisories;
+  try {
+    const [nextSystems, nextForecastPoints, nextAdvisories] = await Promise.all([
+      fetchJson('/api/systems'), fetchJson('/api/forecast-points'), fetchJson('/api/advisories'),
+    ]);
+    systems = nextSystems;
+    forecastPoints = nextForecastPoints;
+    advisories = nextAdvisories;
+    usingDemoData = false;
+  } catch {
+    systems = DEMO_SYSTEMS;
+    forecastPoints = DEMO_FORECAST_POINTS;
+    advisories = DEMO_ADVISORIES;
+    usingDemoData = true;
+  }
+  demoBannerEl.hidden = !usingDemoData;
   // A selected system that vanished (deleted, or a stale id from before a
   // poll) should gracefully drop the selection rather than leave a
-  // dangling info panel open on nothing.
+  // dangling detail card open on nothing.
   if (selectedId && !systems.some((s) => s.id === selectedId)) selectedId = null;
 }
 
@@ -82,8 +132,14 @@ function trackPointsFor(system) {
   return [{ lon: system.lon, lat: system.lat, hour: 0, spread: 0 }, ...own];
 }
 
+function latestAdvisoryFor(systemId) {
+  const own = advisories.filter((a) => a.systemId === systemId);
+  return own.reduce((latest, a) => (!latest || new Date(a.issuedAt) > new Date(latest.issuedAt) ? a : latest), null);
+}
+
 function renderMap() {
   const rect = svg.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
   const bounds = currentBounds();
   const selected = systems.find((s) => s.id === selectedId) ?? null;
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
@@ -110,34 +166,19 @@ function infoRow(label, value) {
   return row;
 }
 
-function latestAdvisoryFor(systemId) {
-  const own = advisories.filter((a) => a.systemId === systemId);
-  return own.reduce((latest, a) => (!latest || new Date(a.issuedAt) > new Date(latest.issuedAt) ? a : latest), null);
-}
-
-function renderAdvisoryBadge(system) {
-  const advisory = system ? latestAdvisoryFor(system.id) : null;
-  advisoryBadgeEl.hidden = !advisory;
-  if (advisory) advisoryBadgeTimeEl.textContent = new Date(advisory.issuedAt).toLocaleString();
-}
-
 // No intensity/category information is shown at all until a system is
 // Classified -- only its formation probabilities -- matching the public
 // page's core rule ("no intensity scale until its active").
-function renderInfoPanel() {
-  const system = systems.find((s) => s.id === selectedId) ?? null;
-  infoPanelEl.hidden = !system;
-  renderAdvisoryBadge(system);
-  if (!system) return;
+function buildCardDetail(system) {
+  const wrap = document.createElement('div');
+  wrap.className = 'system-card__detail';
 
-  infoNameEl.textContent = displayLabel(system);
-  infoNameEl.style.color = systemColor(system);
-
+  const meta = document.createElement('p');
+  meta.className = 'system-card__meta';
   const metaParts = [`${system.seasonLabel} season`, `${system.lat.toFixed(1)}°N, ${Math.abs(system.lon).toFixed(1)}°W`];
   if (!system.classified) metaParts.push(system.stage === 'invest' ? 'Invest' : 'Disturbance');
-  infoMetaEl.textContent = metaParts.join(' · ');
-
-  infoBodyEl.replaceChildren();
+  meta.textContent = metaParts.join(' · ');
+  wrap.append(meta);
 
   if (!system.classified) {
     const probs = [
@@ -145,29 +186,20 @@ function renderInfoPanel() {
       ['5-day formation chance', system.formationProbability5dayPct],
       ['10-day formation chance', system.formationProbability10dayPct],
     ];
-    for (const [label, value] of probs) {
-      infoBodyEl.append(infoRow(label, value == null ? 'Not assessed' : `${value}%`));
-    }
-    return;
+    for (const [label, value] of probs) wrap.append(infoRow(label, value == null ? 'Not assessed' : `${value}%`));
+    return wrap;
   }
 
-  const key = intensityCategoryKey(intensityScore(system));
-  const category = document.createElement('div');
-  category.className = 'info-category';
-  category.style.background = CATEGORY_INFO[key]?.color ?? systemColor(system);
-  category.textContent = CATEGORY_INFO[key]?.label ?? 'Classified';
-  infoBodyEl.append(category);
-
-  infoBodyEl.append(infoRow('Sustained wind', system.windMph != null ? `${system.windMph} mph` : '—'));
-  infoBodyEl.append(infoRow('Max gust', system.gustMph != null ? `${system.gustMph} mph` : '—'));
-  infoBodyEl.append(infoRow('Central pressure', system.pressureMb != null ? `${system.pressureMb} mb` : '—'));
+  wrap.append(infoRow('Sustained wind', system.windMph != null ? `${system.windMph} mph` : '—'));
+  wrap.append(infoRow('Max gust', system.gustMph != null ? `${system.gustMph} mph` : '—'));
+  wrap.append(infoRow('Central pressure', system.pressureMb != null ? `${system.pressureMb} mb` : '—'));
 
   const forecastOnly = trackPointsFor(system).filter((p) => p.hour > 0);
   if (forecastOnly.length) {
-    const heading = document.createElement('h3');
-    heading.className = 'info-subheading';
+    const heading = document.createElement('h4');
+    heading.className = 'system-card__subheading';
     heading.textContent = 'Forecast track';
-    infoBodyEl.append(heading);
+    wrap.append(heading);
     const list = document.createElement('ul');
     list.className = 'info-track-list';
     for (const point of forecastOnly) {
@@ -175,26 +207,82 @@ function renderInfoPanel() {
       li.textContent = `+${point.hour}h${point.symbol ? ` ${point.symbol}` : ''}`;
       list.append(li);
     }
-    infoBodyEl.append(list);
+    wrap.append(list);
+  }
+
+  const advisory = latestAdvisoryFor(system.id);
+  if (advisory) wrap.append(infoRow('Latest advisory', new Date(advisory.issuedAt).toLocaleString()));
+
+  return wrap;
+}
+
+function cardTag(system) {
+  const tag = document.createElement('span');
+  tag.className = 'system-card__tag';
+  if (system.classified) {
+    const key = intensityCategoryKey(intensityScore(system));
+    tag.textContent = CATEGORY_INFO[key]?.label ?? 'Classified';
+    tag.style.background = CATEGORY_INFO[key]?.color ?? systemColor(system);
+  } else {
+    const maxPct = maxFormationProbabilityPct(system);
+    tag.textContent = maxPct != null ? `${maxPct}% chance` : 'Monitoring';
+    tag.style.background = systemColor(system);
+  }
+  return tag;
+}
+
+function renderSystemList() {
+  systemListEl.querySelectorAll('.system-card').forEach((el) => el.remove());
+  systemListEmptyEl.hidden = systems.length > 0;
+
+  for (const system of systems) {
+    const card = document.createElement('article');
+    card.className = `system-card${system.id === selectedId ? ' is-selected' : ''}`;
+    card.dataset.systemId = system.id;
+
+    const summary = document.createElement('button');
+    summary.type = 'button';
+    summary.className = 'system-card__summary';
+    const dot = document.createElement('span');
+    dot.className = 'system-card__dot';
+    dot.style.background = systemColor(system);
+    const name = document.createElement('span');
+    name.className = 'system-card__name';
+    name.textContent = displayLabel(system);
+    summary.append(dot, name, cardTag(system));
+    summary.addEventListener('click', () => select(selectedId === system.id ? null : system.id));
+    card.append(summary);
+
+    if (system.id === selectedId) card.append(buildCardDetail(system));
+    systemListEl.append(card);
   }
 }
 
-function select(systemId) {
+function renderHeroStatus() {
+  const count = systems.length;
+  heroStatusEl.textContent = count === 0
+    ? 'No active disturbances or systems'
+    : `${count} system${count === 1 ? '' : 's'} being tracked`;
+}
+
+function select(systemId, { scroll = false } = {}) {
   selectedId = systemId;
-  renderInfoPanel();
+  renderSystemList();
   renderMap();
+  if (systemId && scroll) {
+    systemListEl.querySelector(`[data-system-id="${systemId}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
 }
 
 svg.addEventListener('click', (event) => {
   const hit = event.target.closest?.('[data-system-id]');
-  if (hit) select(hit.dataset.systemId);
+  if (hit) select(hit.dataset.systemId, { scroll: true });
 });
-infoCloseBtn.addEventListener('click', () => select(null));
 
 async function refresh() {
   await loadData();
-  emptyStateEl.hidden = systems.length > 0;
-  renderInfoPanel();
+  renderHeroStatus();
+  renderSystemList();
   renderMap();
 }
 
@@ -222,5 +310,5 @@ async function init() {
 
 init().catch((err) => {
   console.error(err);
-  document.body.insertAdjacentHTML('beforeend', `<div class="fatal-error">Failed to load NorEASterCaster: ${err.message}</div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div class="fatal-error">Failed to load Tempest Coast: ${err.message}</div>`);
 });

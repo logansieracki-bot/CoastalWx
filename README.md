@@ -1,10 +1,18 @@
-# NorEASterCaster
+# Tempest Coast (repo: NorEASterCaster)
 
-An easy-to-open, single-file forecast page for Nor'easters and coastal lows,
-styled after the National Hurricane Center's advisory pages: a cone of
-uncertainty, an advisory stat line (pressure, wind, movement), key messages,
-a forecast track table, regional impact breakdowns, a watches/warnings list,
-and a plain-language forecast discussion.
+**Tempest Coast** is the live product name for this Nor'easter/coastal-low
+forecasting tool -- the repository itself keeps its original name,
+NorEASterCaster, but everything user-facing (the public site, the
+forecaster editor) is branded Tempest Coast.
+
+This repo started as an easy-to-open, single-file forecast page for
+Nor'easters and coastal lows, styled after the National Hurricane Center's
+advisory pages: a cone of uncertainty, an advisory stat line (pressure,
+wind, movement), key messages, a forecast track table, regional impact
+breakdowns, a watches/warnings list, and a plain-language forecast
+discussion. That original page still exists (see below) but is no longer
+the main thing this repo builds -- see **The editor** and **Public site**
+further down for the real, live tool.
 
 ## Using it
 
@@ -58,16 +66,17 @@ coordinates just work.
 Two separate, independent deployments exist side by side:
 
 - **GitHub Pages** (`.github/workflows/deploy-pages.yml`, every push to
-  this branch): a static-only build of the **editor**, at the site root,
-  with the earlier sample-data public forecast page still at `/forecast/`.
-  Pages serves static files only -- no server, no database -- so this
-  deployed editor can't reach a real backend. It detects that at startup
-  and falls back to saving in your browser's own `localStorage` instead,
-  with an honest banner saying so; nothing about the editor is broken or
-  non-functional there, it's just local-only-per-browser. This deployment
-  intentionally has no accounts/login of its own (local-only mode always
-  shows logged-out, and write actions explain they're unavailable) -- it's
-  a zero-backend instant demo, not the real, shared tool.
+  this branch): a static-only mirror of the real site's own routing --
+  the **public page** at the root, the **editor** at `/editor`, and the
+  earlier sample-data forecast page still at `/forecast/`. Pages serves
+  static files only -- no server, no database, no `/api` -- so both
+  fall back gracefully instead of breaking:
+  - The public page shows clearly-labeled sample data (a "DEMO MODE"
+    banner) instead of a blank map.
+  - The editor falls back to saving in your browser's own `localStorage`,
+    with its own honest banner -- and skips the login gate entirely
+    (there's no real backend to hold accounts here, so the editor is
+    directly usable rather than permanently locked out).
 
   One manual, one-time step this repo needs (not something the workflow
   can do on its own): in **Settings -> Pages -> Build and deployment**,
@@ -93,6 +102,12 @@ data panel, map filling the rest) backed by a real database, where a
 "system" starts life as a **Disturbance** — a probability-colored X you
 place on the map — and progresses through Invest → Formed → Classified
 (with an intensity category, and an automatically assigned storm name).
+
+Nothing of the editor (map, toolbar, sidebar) is visible until you're
+logged in — a full-screen sign-in page covers all of it first. The one
+exception is local-only mode (no backend reachable, e.g. the GitHub Pages
+demo): there's no real account system to sign into there at all, so the
+gate is skipped and the editor works directly, same as it always has.
 
 Disturbances (place, drag, edit 2/5/10-day formation probability, pressure,
 and wind) and per-system shapes/arrows (freeform smoothed shape and arrow
@@ -210,15 +225,21 @@ just hidden client-side once it passes.
 
 ## Public site
 
-The bare domain serves a separate, real, **read-only** public page (not
-the editor) — a clean map of every disturbance/invest/classified system,
-a click-to-open info panel, and a persistent "latest advisory" time for
-whichever system is selected. It shares the editor's own map/marker/
-cone/wind-field rendering code (imported directly, not duplicated) but
-none of its editing machinery — there is no write-capable UI on this page
-at all, not even a disabled one. Before a system is Classified, its panel
-shows only formation probabilities — no intensity or category information
-appears until it's active.
+The bare domain serves a separate, real, **read-only** site (`/public`) —
+deliberately distinct from the editor, not a reskinned version of it: a
+dark, map-first design with a persistent sidebar listing every
+disturbance/invest/classified system as an expandable card (click a card,
+or its marker on the map, to open its detail inline). It shares the
+editor's own map/marker/cone/wind-field rendering code (imported
+directly, not duplicated) but none of its editing machinery — there is no
+write-capable UI on this page at all, not even a disabled one. Before a
+system is Classified, its card shows only formation probabilities — no
+intensity or category information appears until it's active; once
+Classified, the card also shows its latest advisory's issued time.
+
+If no backend is reachable at all (the GitHub Pages deployment), the page
+falls back to a couple of clearly-labeled sample systems with a "DEMO
+MODE" banner, rather than an empty map or a broken page.
 
 To run it:
 
