@@ -101,3 +101,14 @@ db.exec(`
 `);
 
 db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)');
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS storm_names (
+    id TEXT PRIMARY KEY,
+    season INTEGER NOT NULL,
+    sequence INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    used_by_system_id TEXT REFERENCES systems(id),
+    UNIQUE (season, sequence)
+  )
+`);

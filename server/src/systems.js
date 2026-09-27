@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { requireRole, ROLES } from './auth.js';
+import { assignStormName } from './stormNames.js';
 
 // Nor'easter seasons run winter-to-winter (e.g. "2025-26"), not calendar year.
 function currentSeason(date = new Date()) {
@@ -129,9 +130,9 @@ systemsRouter.patch('/systems/:id', requireRole(...ROLES), (req, res) => {
   // lifecycle decisions -- Investigate (stage -> invest) and Classify
   // (classified -> true) -- which a Junior Forecaster can't trigger.
   const body = req.body ?? {};
+  const becomingClassified = Object.prototype.hasOwnProperty.call(body, 'classified') && body.classified && !existing.classified;
   const triggersBigDecision =
-    (Object.prototype.hasOwnProperty.call(body, 'stage') && body.stage !== existing.stage) ||
-    (Object.prototype.hasOwnProperty.call(body, 'classified') && body.classified && !existing.classified);
+    (Object.prototype.hasOwnProperty.call(body, 'stage') && body.stage !== existing.stage) || becomingClassified;
   if (triggersBigDecision && req.user.role === 'junior_forecaster') {
     return res.status(403).json({ error: 'forbidden' });
   }
@@ -147,6 +148,19 @@ systemsRouter.patch('/systems/:id', requireRole(...ROLES), (req, res) => {
     }
   }
   if (updates.length === 0) return res.status(400).json({ error: 'no updatable fields provided' });
+
+  // A system gets the next unused storm name for its season automatically
+  // the moment it's classified -- naming rides on that milestone rather
+  // than being a separate step. Only if it isn't already named (e.g. by a
+  // future manual override) and PATCHABLE_FIELDS's loop above didn't
+  // already set one in this same request.
+  if (becomingClassified && !existing.name && !Object.prototype.hasOwnProperty.call(body, 'name')) {
+    const assignedName = assignStormName(existing.season, existing.id);
+    if (assignedName) {
+      updates.push('name = ?');
+      values.push(assignedName);
+    }
+  }
 
   updates.push('updated_at = ?');
   values.push(new Date().toISOString());
