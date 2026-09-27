@@ -8,6 +8,7 @@ const FORECAST_POINTS_STORAGE_KEY = 'noreastercaster:forecastPoints';
 async function request(path, options) {
   const res = await fetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin', // send/receive the session cookie
     ...options,
   });
   if (!res.ok) {
@@ -43,6 +44,13 @@ const remote = {
   createForecastPoint: (systemId, data) => request(`/systems/${systemId}/forecast-points`, { method: 'POST', body: JSON.stringify(data) }),
   updateForecastPoint: (id, data) => request(`/forecast-points/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteForecastPoint: (id) => request(`/forecast-points/${id}`, { method: 'DELETE' }),
+
+  me: () => request('/me'),
+  login: (username, password) => request('/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  logout: () => request('/logout', { method: 'POST' }),
+  listUsers: () => request('/users'),
+  createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
+  updateUserRole: (id, role) => request(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
 };
 
 // --- local fallback (browser localStorage, no server available) ---
@@ -243,6 +251,28 @@ const local = {
   async deleteForecastPoint(id) {
     writeAllForecastPoints(readAllForecastPoints().filter((r) => r.id !== id));
   },
+
+  // Local-only mode has no server to hold accounts/sessions -- always
+  // "logged out," and login/account-creation fail with an explanatory
+  // message rather than silently pretending to work.
+  async me() {
+    return { user: null };
+  },
+  async login() {
+    throw new Error('Log-in is not available in local-only mode (no backend server reachable).');
+  },
+  async logout() {
+    return null;
+  },
+  async listUsers() {
+    return [];
+  },
+  async createUser() {
+    throw new Error('Accounts are not available in local-only mode.');
+  },
+  async updateUserRole() {
+    throw new Error('Accounts are not available in local-only mode.');
+  },
 };
 
 // --- pick a backend once, at startup ---
@@ -276,5 +306,11 @@ export const api = {
   createForecastPoint: (...args) => impl().createForecastPoint(...args),
   updateForecastPoint: (...args) => impl().updateForecastPoint(...args),
   deleteForecastPoint: (...args) => impl().deleteForecastPoint(...args),
+  me: (...args) => impl().me(...args),
+  login: (...args) => impl().login(...args),
+  logout: (...args) => impl().logout(...args),
+  listUsers: (...args) => impl().listUsers(...args),
+  createUser: (...args) => impl().createUser(...args),
+  updateUserRole: (...args) => impl().updateUserRole(...args),
   isLocalOnly: () => backend === 'local',
 };

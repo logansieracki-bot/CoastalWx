@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
+import { requireRole, ROLES } from './auth.js';
 
 // Nor'easter seasons run winter-to-winter (e.g. "2025-26"), not calendar year.
 function currentSeason(date = new Date()) {
@@ -76,7 +77,7 @@ systemsRouter.get('/systems/:id', (req, res) => {
   res.json(toApi(row));
 });
 
-systemsRouter.post('/systems', (req, res) => {
+systemsRouter.post('/systems', requireRole(...ROLES), (req, res) => {
   const { lat, lon, formationProbability2dayPct, formationProbability5dayPct, formationProbability10dayPct } = req.body ?? {};
   if (typeof lat !== 'number' || typeof lon !== 'number') {
     return res.status(400).json({ error: 'lat and lon are required numbers' });
@@ -119,9 +120,21 @@ const PATCHABLE_FIELDS = {
   forecastInterval: 'forecast_interval',
 };
 
-systemsRouter.patch('/systems/:id', (req, res) => {
+systemsRouter.patch('/systems/:id', requireRole(...ROLES), (req, res) => {
   const existing = db.prepare('SELECT * FROM systems WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'not_found' });
+
+  // This one route covers both routine data entry (wind/pressure/
+  // probabilities/wind field, open to all 4 roles) and the two bigger
+  // lifecycle decisions -- Investigate (stage -> invest) and Classify
+  // (classified -> true) -- which a Junior Forecaster can't trigger.
+  const body = req.body ?? {};
+  const triggersBigDecision =
+    (Object.prototype.hasOwnProperty.call(body, 'stage') && body.stage !== existing.stage) ||
+    (Object.prototype.hasOwnProperty.call(body, 'classified') && body.classified && !existing.classified);
+  if (triggersBigDecision && req.user.role === 'junior_forecaster') {
+    return res.status(403).json({ error: 'forbidden' });
+  }
 
   const updates = [];
   const values = [];
@@ -144,7 +157,7 @@ systemsRouter.patch('/systems/:id', (req, res) => {
   res.json(toApi(row));
 });
 
-systemsRouter.delete('/systems/:id', (req, res) => {
+systemsRouter.delete('/systems/:id', requireRole('owner', 'admin', 'forecaster'), (req, res) => {
   const result = db.prepare('DELETE FROM systems WHERE id = ?').run(req.params.id);
   if (result.changes === 0) return res.status(404).json({ error: 'not_found' });
   res.status(204).end();

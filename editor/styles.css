@@ -37,6 +37,23 @@ h3 { margin: 0 0 4px; font-size: 14px; }
 }
 .local-mode-banner[hidden] { display: none; }
 
+.auth-bar {
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  padding: 6px 14px; background: #f7f9fc; border-bottom: 1px solid var(--ui-border);
+  font-size: 12.5px;
+}
+.login-form { display: flex; align-items: center; gap: 6px; }
+.login-form[hidden], .user-status[hidden] { display: none; }
+.login-form input {
+  border: 1px solid var(--ui-border); border-radius: 7px; padding: 5px 8px; font-size: 12.5px; width: 120px;
+}
+.login-form button { padding: 5px 10px; font-size: 12.5px; }
+.login-error { color: var(--ui-danger); font-weight: 600; }
+.user-status { display: flex; align-items: center; gap: 8px; }
+.user-status button { padding: 5px 10px; font-size: 12.5px; }
+#user-status-label { color: var(--ui-muted); font-weight: 600; }
+#user-status-label strong { color: var(--ui-text); }
+
 .toolbar {
   min-height: 56px;
   padding: 8px 14px;
@@ -297,6 +314,23 @@ button:disabled:hover { border-color: var(--ui-border); }
 .intensity-reference p, .intensity-reference li { font-size: 12px; color: var(--ui-muted); }
 .intensity-reference ul { margin: 4px 0 10px; padding-left: 18px; }
 .intensity-section > button { width: 100%; }
+
+.account-user-row {
+  display: flex; align-items: center; gap: 6px; padding: 6px 4px; font-size: 12.5px;
+  border-bottom: 1px solid var(--ui-border);
+}
+.account-user-row:last-of-type { border-bottom: none; }
+.account-user-row__name { flex: 1; }
+.account-user-row__name small { display: block; color: var(--ui-muted); font-size: 11px; }
+.account-user-row select {
+  border: 1px solid var(--ui-border); border-radius: 7px; padding: 4px; font-size: 11.5px; background: #fff;
+}
+.account-create-form { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.account-create-form input, .account-create-form select {
+  border: 1px solid var(--ui-border); border-radius: 7px; padding: 6px 8px; font-size: 12.5px;
+}
+.account-create-form button { width: 100%; }
+.account-error { color: var(--ui-danger); font-size: 12px; font-weight: 600; }
 
 .fatal-error {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;

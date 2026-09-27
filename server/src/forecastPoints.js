@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
+import { requireRole, ROLES } from './auth.js';
 
 function nextSequence(systemId) {
   const row = db.prepare('SELECT MAX(sequence) AS maxSeq FROM forecast_points WHERE system_id = ?').get(systemId);
@@ -34,7 +35,7 @@ forecastPointsRouter.get('/forecast-points', (req, res) => {
   res.json(rows.map(toApi));
 });
 
-forecastPointsRouter.post('/systems/:systemId/forecast-points', (req, res) => {
+forecastPointsRouter.post('/systems/:systemId/forecast-points', requireRole(...ROLES), (req, res) => {
   const system = db.prepare('SELECT id FROM systems WHERE id = ?').get(req.params.systemId);
   if (!system) return res.status(404).json({ error: 'system not found' });
 
@@ -65,7 +66,7 @@ const PATCHABLE_FIELDS = {
   hourOverride: 'hour_override',
 };
 
-forecastPointsRouter.patch('/forecast-points/:id', (req, res) => {
+forecastPointsRouter.patch('/forecast-points/:id', requireRole(...ROLES), (req, res) => {
   const existing = db.prepare('SELECT * FROM forecast_points WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'not_found' });
 
@@ -88,7 +89,7 @@ forecastPointsRouter.patch('/forecast-points/:id', (req, res) => {
   res.json(toApi(row));
 });
 
-forecastPointsRouter.delete('/forecast-points/:id', (req, res) => {
+forecastPointsRouter.delete('/forecast-points/:id', requireRole(...ROLES), (req, res) => {
   const result = db.prepare('DELETE FROM forecast_points WHERE id = ?').run(req.params.id);
   if (result.changes === 0) return res.status(404).json({ error: 'not_found' });
   res.status(204).end();

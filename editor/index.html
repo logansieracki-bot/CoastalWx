@@ -12,6 +12,18 @@
   <div id="local-mode-banner" class="local-mode-banner" hidden>
     LOCAL-ONLY MODE — no backend server reachable, so changes are saved in this browser only (not shared, not persisted elsewhere). Run the real server (see README) for shared, durable storage.
   </div>
+  <div id="auth-bar" class="auth-bar">
+    <form id="login-form" class="login-form" hidden>
+      <input type="text" id="login-username" placeholder="Username" autocomplete="username" required>
+      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required>
+      <button type="submit">Log in</button>
+      <span id="login-error" class="login-error"></span>
+    </form>
+    <div id="user-status" class="user-status" hidden>
+      <span id="user-status-label"></span>
+      <button id="logout-btn">Log out</button>
+    </div>
+  </div>
   <header class="toolbar">
     <div class="toolbar__title">
       <strong>NorEASterCaster Editor</strong>
@@ -19,10 +31,10 @@
     </div>
     <div class="tool-group">
       <button data-tool="select" class="is-active">Select / Move</button>
-      <button data-tool="create-disturbance">Create Disturbance</button>
-      <button data-tool="shape" data-requires-selection disabled title="Select a system first">Draw Shape</button>
-      <button data-tool="arrow" data-requires-selection disabled title="Select a system first">Draw Arrow</button>
-      <button data-tool="add-forecast-point" data-requires-classification disabled title="Classify a system first">Add Forecast Point</button>
+      <button data-tool="create-disturbance" data-requires-auth>Create Disturbance</button>
+      <button data-tool="shape" data-requires-auth data-requires-selection disabled title="Select a system first">Draw Shape</button>
+      <button data-tool="arrow" data-requires-auth data-requires-selection disabled title="Select a system first">Draw Arrow</button>
+      <button data-tool="add-forecast-point" data-requires-auth data-requires-classification disabled title="Classify a system first">Add Forecast Point</button>
     </div>
     <button id="deselect-btn">Deselect</button>
     <span id="placement-hint" class="placement-hint" hidden></span>
@@ -41,6 +53,11 @@
         <h2>Selected System</h2>
         <p id="empty-hint" class="empty-hint">Select a system, or use Create Disturbance to add one.</p>
         <div id="selected-panel" hidden></div>
+      </section>
+
+      <section id="account-panel-section" class="panel-section" hidden>
+        <h2>Accounts</h2>
+        <div id="account-panel"></div>
       </section>
     </aside>
 

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
+import { requireRole, ROLES } from './auth.js';
 
 function isValidPoints(points) {
   return Array.isArray(points) && points.length >= 2 &&
@@ -27,7 +28,7 @@ annotationsRouter.get('/annotations', (req, res) => {
   res.json(rows.map(toApi));
 });
 
-annotationsRouter.post('/systems/:systemId/annotations', (req, res) => {
+annotationsRouter.post('/systems/:systemId/annotations', requireRole(...ROLES), (req, res) => {
   const system = db.prepare('SELECT id FROM systems WHERE id = ?').get(req.params.systemId);
   if (!system) return res.status(404).json({ error: 'system not found' });
 
@@ -50,7 +51,7 @@ annotationsRouter.post('/systems/:systemId/annotations', (req, res) => {
   res.status(201).json(toApi(row));
 });
 
-annotationsRouter.patch('/annotations/:id', (req, res) => {
+annotationsRouter.patch('/annotations/:id', requireRole(...ROLES), (req, res) => {
   const existing = db.prepare('SELECT * FROM annotations WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'not_found' });
 
@@ -66,7 +67,7 @@ annotationsRouter.patch('/annotations/:id', (req, res) => {
   res.json(toApi(row));
 });
 
-annotationsRouter.delete('/annotations/:id', (req, res) => {
+annotationsRouter.delete('/annotations/:id', requireRole(...ROLES), (req, res) => {
   const result = db.prepare('DELETE FROM annotations WHERE id = ?').run(req.params.id);
   if (result.changes === 0) return res.status(404).json({ error: 'not_found' });
   res.status(204).end();

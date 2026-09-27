@@ -22,9 +22,32 @@ const emptyHintEl = document.getElementById('empty-hint');
 const toolButtons = document.querySelectorAll('[data-tool]');
 const drawToolButtons = document.querySelectorAll('[data-requires-selection]');
 const classifyToolButtons = document.querySelectorAll('[data-requires-classification]');
+const authToolButtons = document.querySelectorAll('[data-requires-auth]');
 const deselectBtn = document.getElementById('deselect-btn');
 const resetViewBtn = document.getElementById('reset-view-btn');
 const placementHint = document.getElementById('placement-hint');
+const loginForm = document.getElementById('login-form');
+const loginUsernameInput = document.getElementById('login-username');
+const loginPasswordInput = document.getElementById('login-password');
+const loginErrorEl = document.getElementById('login-error');
+const userStatusEl = document.getElementById('user-status');
+const userStatusLabelEl = document.getElementById('user-status-label');
+const logoutBtn = document.getElementById('logout-btn');
+const accountPanelSectionEl = document.getElementById('account-panel-section');
+const accountPanelEl = document.getElementById('account-panel');
+
+// Mirrors server/src/auth.js's ROLES/rank ordering exactly -- the two sides
+// never share a module, so this is duplicated the same way currentSeason()
+// and averageRadius() already are between server/src/systems.js and
+// editor/src/api.js.
+const ROLES = ['owner', 'admin', 'forecaster', 'junior_forecaster'];
+const ROLE_RANK = { owner: 4, admin: 3, forecaster: 2, junior_forecaster: 1 };
+function hasRole(user, minRole) {
+  return !!user && (ROLE_RANK[user.role] ?? 0) >= (ROLE_RANK[minRole] ?? 0);
+}
+function roleLabel(role) {
+  return { owner: 'Owner', admin: 'Admin', forecaster: 'Forecaster', junior_forecaster: 'Junior Forecaster' }[role] ?? role;
+}
 
 const TOOL_HINTS = {
   'create-disturbance': 'Click the map to place the new disturbance.',
@@ -39,6 +62,7 @@ let annotations = [];
 let selectedAnnotationId = null;
 let forecastPoints = [];
 let selectedForecastPointId = null;
+let currentUser = null; // {id, username, displayName, role} | null -- from api.me()
 let activeWindThreshold = 'gale'; // 'gale' | 'hfw' -- which quadrant handles are shown/draggable
 let drawingSession = null; // { systemId, type: 'shape'|'arrow', points: [{lon,lat}] } | null
 let lastDrawClick = null; // { x, y, t } -- manual double-click detection for the arrow tool
@@ -133,16 +157,120 @@ function setTool(next) {
 // Add Forecast Point starts being available.
 function updateToolAvailability() {
   const system = systems.find((s) => s.id === selectedId);
+  for (const btn of authToolButtons) {
+    btn.disabled = !currentUser;
+    btn.title = currentUser ? '' : 'Log in to make changes';
+  }
   for (const btn of drawToolButtons) {
+    if (!currentUser) continue; // already disabled by the auth pass above
     btn.disabled = selectedId === null || !!system?.classified;
     btn.title = selectedId === null
       ? 'Select a system first'
       : (system?.classified ? "Not available once classified -- use the forecast track instead" : '');
   }
   for (const btn of classifyToolButtons) {
+    if (!currentUser) continue;
     btn.disabled = !system?.classified;
     btn.title = system?.classified ? '' : 'Classify a system first';
   }
+}
+
+function renderAuthBar() {
+  loginForm.hidden = !!currentUser;
+  userStatusEl.hidden = !currentUser;
+  if (currentUser) {
+    userStatusLabelEl.innerHTML = `Logged in as <strong>${currentUser.displayName}</strong> (${roleLabel(currentUser.role)})`;
+  }
+  accountPanelSectionEl.hidden = !hasRole(currentUser, 'admin');
+  if (hasRole(currentUser, 'admin')) renderAccountPanel();
+}
+
+// Owner/Admin-only account list + creation form -- Owner additionally gets
+// a role dropdown per user (promote/demote), Admin sees roles as plain text.
+async function renderAccountPanel() {
+  const users = await api.listUsers().catch(() => []);
+  accountPanelEl.replaceChildren();
+  const isOwner = currentUser.role === 'owner';
+
+  for (const user of users) {
+    const row = document.createElement('div');
+    row.className = 'account-user-row';
+    const name = document.createElement('span');
+    name.className = 'account-user-row__name';
+    name.innerHTML = `${user.displayName}<small>@${user.username}</small>`;
+    row.append(name);
+
+    if (isOwner) {
+      const roleSelect = document.createElement('select');
+      for (const role of ROLES) {
+        const opt = document.createElement('option');
+        opt.value = role;
+        opt.textContent = roleLabel(role);
+        roleSelect.append(opt);
+      }
+      roleSelect.value = user.role;
+      roleSelect.disabled = user.id === currentUser.id; // can't accidentally demote yourself
+      roleSelect.title = roleSelect.disabled ? "Can't change your own role" : '';
+      roleSelect.addEventListener('change', async () => {
+        await api.updateUserRole(user.id, roleSelect.value);
+        renderAccountPanel();
+      });
+      row.append(roleSelect);
+    } else {
+      const roleTag = document.createElement('span');
+      roleTag.className = 'account-user-row__name';
+      roleTag.textContent = roleLabel(user.role);
+      row.append(roleTag);
+    }
+    accountPanelEl.append(row);
+  }
+
+  const form = document.createElement('div');
+  form.className = 'account-create-form';
+  const usernameInput = document.createElement('input');
+  usernameInput.placeholder = 'Username';
+  const displayNameInput = document.createElement('input');
+  displayNameInput.placeholder = 'Display name';
+  const passwordInput = document.createElement('input');
+  passwordInput.type = 'password';
+  passwordInput.placeholder = 'Password (8+ characters)';
+  form.append(usernameInput, displayNameInput, passwordInput);
+
+  // Only Owner can choose a new account's role -- Admin-created accounts
+  // default to Junior Forecaster (enforced server-side too).
+  let roleSelectForCreate = null;
+  if (isOwner) {
+    roleSelectForCreate = document.createElement('select');
+    for (const role of ROLES) {
+      const opt = document.createElement('option');
+      opt.value = role;
+      opt.textContent = roleLabel(role);
+      roleSelectForCreate.append(opt);
+    }
+    roleSelectForCreate.value = 'junior_forecaster';
+    form.append(roleSelectForCreate);
+  }
+
+  const errorEl = document.createElement('div');
+  errorEl.className = 'account-error';
+  const createBtn = document.createElement('button');
+  createBtn.textContent = 'Create account';
+  createBtn.addEventListener('click', async () => {
+    errorEl.textContent = '';
+    try {
+      await api.createUser({
+        username: usernameInput.value,
+        password: passwordInput.value,
+        displayName: displayNameInput.value,
+        role: roleSelectForCreate?.value,
+      });
+      renderAccountPanel();
+    } catch (err) {
+      errorEl.textContent = err.message === 'username_taken' ? 'That username is already taken.' : err.message;
+    }
+  });
+  form.append(createBtn, errorEl);
+  accountPanelEl.append(form);
 }
 
 // Selecting a system always drops any shape/arrow selection (one thing
@@ -270,6 +398,8 @@ function renderAnnotationsSection(system) {
   const deleteBtn = document.createElement('button');
   deleteBtn.textContent = 'Delete shape/arrow';
   deleteBtn.className = 'danger';
+  deleteBtn.disabled = !currentUser;
+  deleteBtn.title = currentUser ? '' : 'Log in to make changes';
   deleteBtn.addEventListener('click', async () => {
     if (!confirm(`Delete this ${selectedAnn.type}? This cannot be undone.`)) return;
     await api.deleteAnnotation(selectedAnn.id);
@@ -330,6 +460,7 @@ function renderForecastTrackSection(system) {
     intervalSelect.append(opt);
   }
   intervalSelect.value = String(system.forecastInterval);
+  intervalSelect.disabled = !currentUser;
   intervalSelect.addEventListener('change', async () => {
     const updatedSystem = await api.updateSystem(system.id, { forecastInterval: Number(intervalSelect.value) });
     systems = systems.map((s) => (s.id === updatedSystem.id ? updatedSystem : s));
@@ -373,6 +504,7 @@ function renderForecastTrackSection(system) {
       modeSelect.append(optionEl);
     }
     modeSelect.value = point.hourMode === 'override' ? `override:${point.hourOverride}` : (point.hourMode || 'auto');
+    modeSelect.disabled = !currentUser;
 
     const hourInput = document.createElement('input');
     hourInput.type = 'number';
@@ -385,7 +517,7 @@ function renderForecastTrackSection(system) {
       // Only a manually-scheduled hour is ever directly editable -- auto
       // and override hours are computed by syncForecastSchedule from the
       // interval/gap instead.
-      hourInput.disabled = modeSelect.value !== 'manual';
+      hourInput.disabled = modeSelect.value !== 'manual' || !currentUser;
     }
     modeSelect.addEventListener('change', updateHourInputState);
     updateHourInputState();
@@ -397,6 +529,7 @@ function renderForecastTrackSection(system) {
     windInput.value = point.windMph ?? '';
     windInput.placeholder = 'mph';
     windInput.title = 'Forecast sustained wind (mph) -- drives the marker\'s intensity symbol';
+    windInput.disabled = !currentUser;
 
     const spreadInput = document.createElement('input');
     spreadInput.type = 'number';
@@ -405,9 +538,11 @@ function renderForecastTrackSection(system) {
     spreadInput.value = point.spreadMi;
     spreadInput.placeholder = 'mi';
     spreadInput.title = 'Cone spread (mi)';
+    spreadInput.disabled = !currentUser;
 
     const saveBtn = document.createElement('button');
     saveBtn.textContent = 'Save';
+    saveBtn.disabled = !currentUser;
     saveBtn.addEventListener('click', async () => {
       const [mode, overrideStep] = modeSelect.value.split(':');
       const updated = await api.updateForecastPoint(point.id, {
@@ -426,6 +561,7 @@ function renderForecastTrackSection(system) {
     const deleteBtn = document.createElement('button');
     deleteBtn.textContent = 'Delete';
     deleteBtn.className = 'danger';
+    deleteBtn.disabled = !currentUser;
     deleteBtn.addEventListener('click', async () => {
       await api.deleteForecastPoint(point.id);
       forecastPoints = forecastPoints.filter((p) => p.id !== point.id);
@@ -541,8 +677,11 @@ function renderIntensitySection(system, { windInput, gustInput, pressureInput })
       system.galeRadiusMi != null && system.pressureMb != null;
     const classifyBtn = document.createElement('button');
     classifyBtn.textContent = 'Classify';
-    classifyBtn.disabled = !canClassify;
-    classifyBtn.title = canClassify ? '' : 'Investigate it, mark it Formed, and save wind/gust/radius/pressure first.';
+    const canClassifyRole = hasRole(currentUser, 'forecaster');
+    classifyBtn.disabled = !canClassify || !canClassifyRole;
+    classifyBtn.title = !currentUser
+      ? 'Log in to make changes'
+      : (!canClassifyRole ? 'Requires Forecaster role or higher' : (canClassify ? '' : 'Investigate it, mark it Formed, and save wind/gust/radius/pressure first.'));
     classifyBtn.addEventListener('click', async () => {
       const key = intensityCategoryKey(intensityScore(system));
       const label = key ? CATEGORY_INFO[key].label : 'a category';
@@ -576,7 +715,8 @@ function renderSelectedPanel() {
   const formedBtn = document.createElement('button');
   formedBtn.className = `formed-toggle${system.formed ? ' is-active' : ''}`;
   formedBtn.textContent = system.formed ? 'Formed' : 'Not Formed';
-  formedBtn.title = 'Has a closed circulation physically formed? Click to toggle.';
+  formedBtn.disabled = !currentUser;
+  formedBtn.title = currentUser ? 'Has a closed circulation physically formed? Click to toggle.' : 'Log in to make changes';
   formedBtn.addEventListener('click', async () => {
     const updated = await api.updateSystem(system.id, { formed: !system.formed });
     systems = systems.map((s) => (s.id === updated.id ? updated : s));
@@ -637,6 +777,8 @@ function renderSelectedPanel() {
   const saveBtn = document.createElement('button');
   saveBtn.textContent = 'Save';
   saveBtn.className = 'primary';
+  saveBtn.disabled = !currentUser;
+  saveBtn.title = currentUser ? '' : 'Log in to make changes';
   saveBtn.addEventListener('click', async () => {
     const updated = await api.updateSystem(system.id, {
       formationProbability2dayPct: prob2Input.value === '' ? null : Number(prob2Input.value),
@@ -655,8 +797,11 @@ function renderSelectedPanel() {
   if (system.stage !== 'invest') {
     investigateBtn = document.createElement('button');
     investigateBtn.textContent = 'Investigate';
-    investigateBtn.disabled = !system.formed;
-    investigateBtn.title = system.formed ? '' : 'Mark it Formed first.';
+    const canInvestigateRole = hasRole(currentUser, 'forecaster');
+    investigateBtn.disabled = !system.formed || !canInvestigateRole;
+    investigateBtn.title = !currentUser
+      ? 'Log in to make changes'
+      : (!canInvestigateRole ? 'Requires Forecaster role or higher' : (system.formed ? '' : 'Mark it Formed first.'));
     investigateBtn.addEventListener('click', async () => {
       if (!confirm(`Investigate ${system.displayName}? It will become an Invest.`)) return;
       const updated = await api.updateSystem(system.id, { stage: 'invest' });
@@ -668,6 +813,9 @@ function renderSelectedPanel() {
   const deleteBtn = document.createElement('button');
   deleteBtn.textContent = 'Delete';
   deleteBtn.className = 'danger';
+  const canDeleteRole = hasRole(currentUser, 'forecaster');
+  deleteBtn.disabled = !canDeleteRole;
+  deleteBtn.title = !currentUser ? 'Log in to make changes' : (canDeleteRole ? '' : 'Requires Forecaster role or higher');
   deleteBtn.addEventListener('click', async () => {
     if (!confirm(`Delete ${system.displayName}? This cannot be undone.`)) return;
     await api.deleteSystem(system.id);
@@ -1087,6 +1235,30 @@ async function init() {
   deselectBtn.addEventListener('click', () => select(null));
   resetViewBtn.addEventListener('click', () => setView(resetView(viewState)));
 
+  loginForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    loginErrorEl.textContent = '';
+    try {
+      const { user } = await api.login(loginUsernameInput.value, loginPasswordInput.value);
+      currentUser = user;
+      loginUsernameInput.value = '';
+      loginPasswordInput.value = '';
+      updateToolAvailability();
+      renderAuthBar();
+      renderSidebar();
+    } catch (err) {
+      loginErrorEl.textContent = err.message === 'invalid_credentials' ? 'Incorrect username or password.' : err.message;
+    }
+  });
+
+  logoutBtn.addEventListener('click', async () => {
+    await api.logout();
+    currentUser = null;
+    updateToolAvailability();
+    renderAuthBar();
+    renderSidebar();
+  });
+
   window.addEventListener('resize', renderMap);
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && (tool === 'shape' || tool === 'arrow' || tool === 'add-forecast-point')) setTool('select');
@@ -1095,8 +1267,12 @@ async function init() {
   await detectBackend();
   document.getElementById('local-mode-banner').hidden = !api.isLocalOnly();
 
-  [systems, annotations, forecastPoints] = await Promise.all([api.listSystems(), api.listAnnotations(), api.listForecastPoints()]);
+  [systems, annotations, forecastPoints, currentUser] = await Promise.all([
+    api.listSystems(), api.listAnnotations(), api.listForecastPoints(),
+    api.me().then((r) => r.user),
+  ]);
   updateToolAvailability();
+  renderAuthBar();
   setTool('select');
   renderSidebar();
   renderMap();
