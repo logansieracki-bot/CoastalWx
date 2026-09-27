@@ -8,6 +8,8 @@ import { createMapRenderer } from './mapRenderer.js';
 import { createPointRenderer } from './pointRenderer.js';
 import { createAnnotationRenderer } from './annotationRenderer.js';
 import { createTrackConeRenderer } from './trackConeRenderer.js';
+import { createSpreadEditor } from './spreadEditor.js';
+import { milesBetween } from './trackGeometry.js';
 import { projectLonLat } from './geo.js';
 import { api, detectBackend } from './api.js';
 
@@ -43,6 +45,7 @@ let mapRenderer = null;
 let pointRenderer = null;
 let annotationRenderer = null;
 let trackConeRenderer = null;
+let spreadEditor = null;
 
 async function loadGeography() {
   const [land, lakes, borders, states] = await Promise.all(
@@ -86,6 +89,15 @@ function selectedSystemTrackPoints() {
   return [{ lon: system.lon, lat: system.lat, hour: 0, spread: 0 }, ...own];
 }
 
+// The raw forecast_points record for the spread editor (needs spreadMi and
+// id directly, unlike selectedSystemTrackPoints()'s renamed/synthetic-
+// current-prepended shape). null when nothing eligible is selected -- the
+// synthetic hour-0 "current" point never appears in forecastPoints at all,
+// so any hit here is automatically a real, editable point.
+function selectedForecastPoint() {
+  return forecastPoints.find((p) => p.id === selectedForecastPointId) ?? null;
+}
+
 // Shapes/arrows belonging to a classified system are hidden once
 // classified -- the forecast track/cone replaces them as that system's
 // visual representation (the underlying rows aren't deleted, just no
@@ -101,6 +113,7 @@ function renderMap() {
   trackConeRenderer.render({ points: selectedSystemTrackPoints(), selectedForecastPointId, bounds, width: rect.width, height: rect.height });
   annotationRenderer.render({ annotations: visibleAnnotations(), selectedAnnotationId, draft: drawingSession, systems, bounds, width: rect.width, height: rect.height });
   pointRenderer.render({ systems, selectedId, bounds, width: rect.width, height: rect.height });
+  spreadEditor.render({ point: selectedForecastPoint(), bounds, width: rect.width, height: rect.height });
 }
 
 function setView(next) {
@@ -725,12 +738,16 @@ function setupPointerHandling() {
 
   svg.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
+    const spreadHandleHit = event.target.closest?.('[data-spread-handle]');
     const vertexHit = event.target.closest?.('[data-vertex-index]');
     const annotationHit = event.target.closest?.('[data-annotation-id]');
     const systemHit = event.target.closest?.('[data-system-id]');
     const forecastPointHit = event.target.closest?.('[data-forecast-point-id]');
 
-    if (vertexHit) {
+    if (spreadHandleHit && selectedForecastPointId) {
+      gesture = { kind: 'spread', pointId: selectedForecastPointId, downX: event.clientX, downY: event.clientY };
+      svg.setPointerCapture?.(event.pointerId);
+    } else if (vertexHit) {
       gesture = {
         kind: 'vertex',
         annotationId: vertexHit.dataset.annotationId,
@@ -783,6 +800,17 @@ function setupPointerHandling() {
       const geo = geoAtClient(event, svg.getBoundingClientRect());
       point.lat = geo.lat;
       point.lon = geo.lon;
+      renderMap();
+      return;
+    }
+    if (gesture?.kind === 'spread') {
+      const dist = Math.hypot(event.clientX - gesture.downX, event.clientY - gesture.downY);
+      if (dist <= 4) return;
+      gesture.moved = true;
+      const point = forecastPoints.find((p) => p.id === gesture.pointId);
+      if (!point) return;
+      const geo = geoAtClient(event, svg.getBoundingClientRect());
+      point.spreadMi = Math.round(Math.min(1500, Math.max(0, milesBetween(point, geo))));
       renderMap();
       return;
     }
@@ -843,6 +871,17 @@ function setupPointerHandling() {
       return;
     }
 
+    if (current.kind === 'spread') {
+      const point = forecastPoints.find((p) => p.id === current.pointId);
+      if (current.moved && point) {
+        const updated = await api.updateForecastPoint(point.id, { spreadMi: point.spreadMi });
+        forecastPoints = forecastPoints.map((p) => (p.id === updated.id ? updated : p));
+        renderSidebar();
+        renderMap();
+      }
+      return; // a plain click on the handle (no drag) is a no-op
+    }
+
     // Blank space: a real drag here was a pan (navigation.js already moved
     // the camera) -- only act on it if it was a plain click.
     const dist = Math.hypot(event.clientX - current.downX, event.clientY - current.downY);
@@ -866,6 +905,7 @@ async function init() {
   trackConeRenderer = createTrackConeRenderer(svg);
   annotationRenderer = createAnnotationRenderer(svg);
   pointRenderer = createPointRenderer(svg);
+  spreadEditor = createSpreadEditor(svg);
 
   attachNavigation({
     svg,
@@ -880,7 +920,8 @@ async function init() {
       !event.target.closest?.('[data-system-id]') &&
       !event.target.closest?.('[data-annotation-id]') &&
       !event.target.closest?.('[data-vertex-index]') &&
-      !event.target.closest?.('[data-forecast-point-id]'),
+      !event.target.closest?.('[data-forecast-point-id]') &&
+      !event.target.closest?.('[data-spread-handle]'),
   });
 
   setupPointerHandling();

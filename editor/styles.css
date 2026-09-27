@@ -222,6 +222,22 @@ button:disabled:hover { border-color: var(--ui-border); }
   vector-effect: non-scaling-stroke;
 }
 
+/* Selected forecast point's cone-spread drag handle: a dashed ring at the
+   current radius, a guide line, and a handle at its end. */
+.spread-ring {
+  fill: rgba(45, 105, 216, .035); stroke: rgba(45, 105, 216, .62);
+  stroke-width: 1.2px; stroke-dasharray: 5 5; vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.spread-guide {
+  stroke: rgba(45, 105, 216, .52); stroke-width: 1px;
+  vector-effect: non-scaling-stroke; pointer-events: none;
+}
+.spread-handle {
+  fill: var(--ui-accent); stroke: #fff; stroke-width: 1.8px;
+  vector-effect: non-scaling-stroke; cursor: ew-resize;
+}
+
 .annotations-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--ui-border); }
 .annotations-section h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--ui-muted); }
 .selected-annotation-panel .empty-hint { margin: 0 0 10px; }
