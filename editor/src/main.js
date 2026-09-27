@@ -715,6 +715,13 @@ function setupPointerHandling() {
   // kinds: 'point' (drag marker) | 'vertex' (drag annotation vertex) |
   // 'annotation' (click an annotation's fill/line) |
   // 'forecast-point' (drag/select a track point) | 'blank' (click/pan empty space)
+  //
+  // Hit-testing a specific existing element always wins, regardless of the
+  // active tool -- clicking directly on a marker, vertex, or forecast point
+  // unambiguously means "interact with that thing," so you're never forced
+  // to switch back to Select just to nudge something while, say, Add
+  // Forecast Point is active. Only a blank-space click is tool-dependent
+  // (place/draw vs. pan/deselect).
 
   svg.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
@@ -723,7 +730,7 @@ function setupPointerHandling() {
     const systemHit = event.target.closest?.('[data-system-id]');
     const forecastPointHit = event.target.closest?.('[data-forecast-point-id]');
 
-    if (tool === 'select' && vertexHit) {
+    if (vertexHit) {
       gesture = {
         kind: 'vertex',
         annotationId: vertexHit.dataset.annotationId,
@@ -731,12 +738,12 @@ function setupPointerHandling() {
         downX: event.clientX, downY: event.clientY, moved: false,
       };
       svg.setPointerCapture?.(event.pointerId);
-    } else if (tool === 'select' && annotationHit) {
+    } else if (annotationHit) {
       gesture = { kind: 'annotation', annotationId: annotationHit.dataset.annotationId, downX: event.clientX, downY: event.clientY };
-    } else if (tool === 'select' && systemHit) {
+    } else if (systemHit) {
       gesture = { kind: 'point', id: systemHit.dataset.systemId, downX: event.clientX, downY: event.clientY, moved: false };
       svg.setPointerCapture?.(event.pointerId);
-    } else if (tool === 'select' && forecastPointHit) {
+    } else if (forecastPointHit) {
       gesture = { kind: 'forecast-point', id: forecastPointHit.dataset.forecastPointId, downX: event.clientX, downY: event.clientY, moved: false };
       svg.setPointerCapture?.(event.pointerId);
     } else {
@@ -865,8 +872,11 @@ async function init() {
     getView: () => viewState,
     setView,
     getRenderedBounds: () => mapRenderer.getLastRender()?.bounds,
+    // Panning works in every tool now, same as the hit-tested gestures above
+    // -- a real drag on blank space is unambiguous regardless of which tool
+    // is active, and a plain click (no real movement) still reaches
+    // setupPointerHandling's own tool-specific place/draw logic below.
     shouldStartPan: (event) =>
-      tool !== 'create-disturbance' && tool !== 'shape' && tool !== 'arrow' && tool !== 'add-forecast-point' &&
       !event.target.closest?.('[data-system-id]') &&
       !event.target.closest?.('[data-annotation-id]') &&
       !event.target.closest?.('[data-vertex-index]') &&

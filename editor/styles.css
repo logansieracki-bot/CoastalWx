@@ -203,8 +203,8 @@ button:disabled:hover { border-color: var(--ui-border); }
 .forecast-cone.cone-fill { fill: rgba(255, 255, 255, .92); stroke: none; }
 .forecast-cone-late.cone-day4-5 { fill: rgba(255, 255, 255, .55); stroke: none; }
 .forecast-cone-outline { stroke: none; }
-.forecast-cone-outline-full { fill: rgba(17, 17, 17, .9); }
-.forecast-cone-outline-early { fill: rgba(255, 255, 255, .95); }
+.forecast-cone-outline-full { fill: rgba(255, 255, 255, .95); }
+.forecast-cone-outline-early { fill: rgba(17, 17, 17, .9); }
 .forecast-track { fill: none; stroke: #111820; stroke-width: 2.1px; vector-effect: non-scaling-stroke; }
 
 /* Forecast-point dot + hour label at each real forecast point (not the
