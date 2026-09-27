@@ -1,6 +1,6 @@
 import {
   INITIAL_BOUNDS, maxFormationProbabilityPct, systemColor, displayLabel,
-  intensityScore, intensityCategoryKey, categorySymbol, CATEGORY_INFO, defaultSpreadForHour,
+  intensityScore, intensityCategoryKey, categorySymbol, windOnlyIntensityScore, CATEGORY_INFO, defaultSpreadForHour,
 } from './constants.js';
 import { createViewState, getAspectFittedBounds, resetView } from './viewState.js';
 import { attachNavigation } from './navigation.js';
@@ -69,17 +69,6 @@ function currentBounds() {
 // The selected system's own lat/lon is always its hour-0 "current position"
 // -- forecast_points never duplicate it, so it's synthesized here and
 // prepended ahead of the saved forecast points (ordered by sequence).
-// Each forecast point's marker symbol reuses the exact same category scale
-// as the system's own classification -- its forecast wind stands in for
-// system.windMph, while gust/radius/pressure are held at the system's
-// current values (this app doesn't forecast those independently per point).
-// null (no symbol shown) until the point's own wind is filled in.
-function pointIntensitySymbol(system, windMph) {
-  return categorySymbol(intensityCategoryKey(intensityScore({
-    windMph, gustMph: system.gustMph, galeRadiusMi: system.galeRadiusMi, pressureMb: system.pressureMb,
-  })));
-}
-
 function selectedSystemTrackPoints() {
   const system = systems.find((s) => s.id === selectedId);
   if (!system || !system.classified) return [];
@@ -88,7 +77,7 @@ function selectedSystemTrackPoints() {
     .sort((a, b) => a.sequence - b.sequence)
     .map((p) => ({
       id: p.id, lon: p.lon, lat: p.lat, hour: p.hour, spread: p.spreadMi,
-      symbol: pointIntensitySymbol(system, p.windMph),
+      symbol: categorySymbol(intensityCategoryKey(windOnlyIntensityScore(p.windMph))),
     }));
   return [{ lon: system.lon, lat: system.lat, hour: 0, spread: 0 }, ...own];
 }
@@ -1057,9 +1046,13 @@ function setupPointerHandling() {
 async function init() {
   const geography = await loadGeography();
   mapRenderer = createMapRenderer(svg, geography);
-  trackConeRenderer = createTrackConeRenderer(svg);
+  // windFieldRenderer's fill goes under the cone (appended before
+  // trackConeRenderer is created, since that renderer self-appends
+  // immediately) so the forecast cone reads as the topmost map-level
+  // shape rather than getting washed out by a translucent wind field.
   windFieldRenderer = createWindFieldRenderer(svg);
   svg.append(windFieldRenderer.fieldLayer);
+  trackConeRenderer = createTrackConeRenderer(svg);
   annotationRenderer = createAnnotationRenderer(svg);
   pointRenderer = createPointRenderer(svg);
   // windFieldRenderer's handles are appended here, after pointRenderer --

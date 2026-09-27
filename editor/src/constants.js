@@ -64,6 +64,19 @@ export function intensityScore({ windMph, gustMph, galeRadiusMi, pressureMb }) {
   return (windPoints + gustPoints) * sizeFactor + pressurePoints;
 }
 
+// A forecast point only ever has a forecast wind, never a full reading
+// (gust/gale-radius/pressure), so its own intensity symbol can't reuse
+// intensityScore() itself -- it uses just that formula's wind term (the
+// same "points above 35 mph, floored at 0" the system-level score also
+// starts from), scored against the same category thresholds. This is
+// deliberately NOT the system's current gust/radius/pressure plugged in
+// alongside the point's forecast wind -- a point's symbol reflects its
+// own forecast wind alone, not a mix of forecast and present conditions.
+export function windOnlyIntensityScore(windMph) {
+  if (typeof windMph !== 'number') return null;
+  return Math.max(0, windMph - 35);
+}
+
 export function intensityCategoryKey(score) {
   if (typeof score !== 'number') return null;
   if (score < 10) return 'ed';
