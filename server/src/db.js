@@ -31,6 +31,7 @@ db.exec(`
     gale_radius_mi REAL,
     formed INTEGER NOT NULL DEFAULT 0,
     classified INTEGER NOT NULL DEFAULT 0,
+    forecast_interval INTEGER NOT NULL DEFAULT 12 CHECK (forecast_interval IN (6, 12, 24)),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )
@@ -59,6 +60,8 @@ db.exec(`
     hour INTEGER NOT NULL,
     wind_mph REAL,
     spread_mi REAL NOT NULL DEFAULT 0,
+    hour_mode TEXT NOT NULL DEFAULT 'auto' CHECK (hour_mode IN ('auto', 'manual', 'override')),
+    hour_override INTEGER,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )

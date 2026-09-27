@@ -99,6 +99,7 @@ function forecastPointToApi(row) {
     id: row.id, systemId: row.systemId, sequence: row.sequence,
     lon: row.lon, lat: row.lat, hour: row.hour,
     windMph: row.windMph ?? null, spreadMi: row.spreadMi ?? 0,
+    hourMode: row.hourMode ?? 'auto', hourOverride: row.hourOverride ?? null,
     createdAt: row.createdAt, updatedAt: row.updatedAt,
   };
 }
@@ -127,6 +128,7 @@ function toApi(row) {
     galeRadiusMi: row.galeRadiusMi ?? null,
     formed: !!row.formed,
     classified: !!row.classified,
+    forecastInterval: row.forecastInterval ?? 12,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -149,7 +151,7 @@ const local = {
       formationProbability5dayPct: formationProbability5dayPct ?? null,
       formationProbability10dayPct: formationProbability10dayPct ?? null,
       pressureMb: null, windMph: null, gustMph: null, galeRadiusMi: null,
-      formed: false, classified: false,
+      formed: false, classified: false, forecastInterval: 12,
       createdAt: now, updatedAt: now,
     };
     writeAll([...rows, row]);
@@ -197,13 +199,14 @@ const local = {
   async listForecastPoints() {
     return readAllForecastPoints().map(forecastPointToApi);
   },
-  async createForecastPoint(systemId, { lon, lat, hour, windMph, spreadMi }) {
+  async createForecastPoint(systemId, { lon, lat, hour, windMph, spreadMi, hourMode }) {
     const rows = readAllForecastPoints();
     const sequence = Math.max(0, ...rows.filter((r) => r.systemId === systemId).map((r) => r.sequence)) + 1;
     const now = new Date().toISOString();
     const row = {
       id: crypto.randomUUID(), systemId, sequence, lon, lat, hour,
       windMph: windMph ?? null, spreadMi: spreadMi ?? 0,
+      hourMode: ['auto', 'manual', 'override'].includes(hourMode) ? hourMode : 'auto', hourOverride: null,
       createdAt: now, updatedAt: now,
     };
     writeAllForecastPoints([...rows, row]);

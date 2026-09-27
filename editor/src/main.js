@@ -10,6 +10,7 @@ import { createAnnotationRenderer } from './annotationRenderer.js';
 import { createTrackConeRenderer } from './trackConeRenderer.js';
 import { createSpreadEditor } from './spreadEditor.js';
 import { milesBetween } from './trackGeometry.js';
+import { VALID_INTERVALS, nextForecastHour, recomputeForecastHours } from './forecastSchedule.js';
 import { projectLonLat } from './geo.js';
 import { api, detectBackend } from './api.js';
 
@@ -288,6 +289,29 @@ function renderAnnotationsSection(system) {
   selectedPanelEl.append(panel);
 }
 
+// After any change that can shift auto-scheduled hours (add, delete, a
+// mode/manual-hour/override edit, or an interval change), recompute every
+// point's hour in sequence order and PATCH only the ones that actually
+// changed -- earlier points are never affected by a later one, but a
+// change to an earlier point can ripple forward through every auto point
+// after it.
+async function syncForecastSchedule(system) {
+  const own = forecastPoints
+    .filter((p) => p.systemId === system.id)
+    .sort((a, b) => a.sequence - b.sequence);
+  const recomputed = recomputeForecastHours(own, system.forecastInterval);
+  for (let i = 0; i < own.length; i++) {
+    const before = own[i];
+    const after = recomputed[i];
+    if (before.hour !== after.hour || before.hourMode !== after.hourMode || before.hourOverride !== after.hourOverride) {
+      const updated = await api.updateForecastPoint(before.id, {
+        hour: after.hour, hourMode: after.hourMode, hourOverride: after.hourOverride,
+      });
+      forecastPoints = forecastPoints.map((p) => (p.id === updated.id ? updated : p));
+    }
+  }
+}
+
 function renderForecastTrackSection(system) {
   const ownPoints = forecastPoints
     .filter((p) => p.systemId === system.id)
@@ -298,6 +322,30 @@ function renderForecastTrackSection(system) {
   const heading = document.createElement('h4');
   heading.textContent = 'Forecast track';
   wrap.append(heading);
+
+  const intervalRow = document.createElement('div');
+  intervalRow.className = 'forecast-point-row';
+  const intervalLabel = document.createElement('span');
+  intervalLabel.className = 'forecast-point-label';
+  intervalLabel.textContent = 'Interval';
+  const intervalSelect = document.createElement('select');
+  intervalSelect.title = 'Default spacing between automatically-scheduled forecast points';
+  for (const step of VALID_INTERVALS) {
+    const opt = document.createElement('option');
+    opt.value = String(step);
+    opt.textContent = `${step}h`;
+    intervalSelect.append(opt);
+  }
+  intervalSelect.value = String(system.forecastInterval);
+  intervalSelect.addEventListener('change', async () => {
+    const updatedSystem = await api.updateSystem(system.id, { forecastInterval: Number(intervalSelect.value) });
+    systems = systems.map((s) => (s.id === updatedSystem.id ? updatedSystem : s));
+    await syncForecastSchedule(updatedSystem);
+    renderSidebar();
+    renderMap();
+  });
+  intervalRow.append(intervalLabel, intervalSelect);
+  wrap.append(intervalRow);
 
   if (ownPoints.length === 0) {
     const empty = document.createElement('p');
@@ -316,6 +364,23 @@ function renderForecastTrackSection(system) {
     label.title = 'Select this point (or drag its dot on the map)';
     label.addEventListener('click', () => selectForecastPoint(point));
 
+    const modeSelect = document.createElement('select');
+    modeSelect.title = 'How this point\'s forecast hour is scheduled';
+    const modeOptions = [
+      { value: 'auto', label: 'Auto' },
+      { value: 'manual', label: 'Manual' },
+      { value: 'override:6', label: '+6h gap' },
+      { value: 'override:12', label: '+12h gap' },
+      { value: 'override:24', label: '+24h gap' },
+    ];
+    for (const opt of modeOptions) {
+      const optionEl = document.createElement('option');
+      optionEl.value = opt.value;
+      optionEl.textContent = opt.label;
+      modeSelect.append(optionEl);
+    }
+    modeSelect.value = point.hourMode === 'override' ? `override:${point.hourOverride}` : (point.hourMode || 'auto');
+
     const hourInput = document.createElement('input');
     hourInput.type = 'number';
     hourInput.min = '0';
@@ -323,6 +388,14 @@ function renderForecastTrackSection(system) {
     hourInput.value = point.hour;
     hourInput.placeholder = 'hr';
     hourInput.title = 'Forecast hour';
+    function updateHourInputState() {
+      // Only a manually-scheduled hour is ever directly editable -- auto
+      // and override hours are computed by syncForecastSchedule from the
+      // interval/gap instead.
+      hourInput.disabled = modeSelect.value !== 'manual';
+    }
+    modeSelect.addEventListener('change', updateHourInputState);
+    updateHourInputState();
 
     const windInput = document.createElement('input');
     windInput.type = 'number';
@@ -343,12 +416,16 @@ function renderForecastTrackSection(system) {
     const saveBtn = document.createElement('button');
     saveBtn.textContent = 'Save';
     saveBtn.addEventListener('click', async () => {
+      const [mode, overrideStep] = modeSelect.value.split(':');
       const updated = await api.updateForecastPoint(point.id, {
-        hour: hourInput.value === '' ? point.hour : Number(hourInput.value),
+        hour: mode === 'manual' ? (hourInput.value === '' ? point.hour : Number(hourInput.value)) : point.hour,
+        hourMode: mode,
+        hourOverride: mode === 'override' ? Number(overrideStep) : null,
         windMph: windInput.value === '' ? null : Number(windInput.value),
         spreadMi: spreadInput.value === '' ? 0 : Number(spreadInput.value),
       });
       forecastPoints = forecastPoints.map((p) => (p.id === updated.id ? updated : p));
+      await syncForecastSchedule(system);
       renderSidebar();
       renderMap();
     });
@@ -360,11 +437,12 @@ function renderForecastTrackSection(system) {
       await api.deleteForecastPoint(point.id);
       forecastPoints = forecastPoints.filter((p) => p.id !== point.id);
       if (selectedForecastPointId === point.id) selectedForecastPointId = null;
+      await syncForecastSchedule(system);
       renderSidebar();
       renderMap();
     });
 
-    row.append(label, hourInput, windInput, spreadInput, saveBtn, deleteBtn);
+    row.append(label, modeSelect, hourInput, windInput, spreadInput, saveBtn, deleteBtn);
     wrap.append(row);
   }
 
@@ -612,11 +690,12 @@ async function placeDisturbance(geo) {
 }
 
 async function placeForecastPoint(geo) {
-  const own = forecastPoints.filter((p) => p.systemId === selectedId);
-  const lastHour = own.length ? Math.max(...own.map((p) => p.hour)) : 0;
-  const hour = lastHour + 12;
+  const system = systems.find((s) => s.id === selectedId);
+  if (!system) return;
+  const own = forecastPoints.filter((p) => p.systemId === selectedId).sort((a, b) => a.sequence - b.sequence);
+  const hour = nextForecastHour(own, system.forecastInterval);
   const created = await api.createForecastPoint(selectedId, {
-    lon: geo.lon, lat: geo.lat, hour, spreadMi: defaultSpreadForHour(hour),
+    lon: geo.lon, lat: geo.lat, hour, hourMode: 'auto', spreadMi: defaultSpreadForHour(hour),
   });
   forecastPoints = [...forecastPoints, created];
   // Stays in this tool, unlike Create Disturbance -- a track needs several
@@ -738,6 +817,13 @@ function setupPointerHandling() {
 
   svg.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
+    // Without this, dragging any of the hit-tested targets below (marker,
+    // vertex, forecast point, spread handle) also fires the browser's
+    // native text-selection-drag behavior, highlighting sidebar/toolbar
+    // text as a side effect -- navigation.js's own pan-drag already calls
+    // this, but shouldStartPan excludes these targets, so it never ran for
+    // them.
+    event.preventDefault();
     const spreadHandleHit = event.target.closest?.('[data-spread-handle]');
     const vertexHit = event.target.closest?.('[data-vertex-index]');
     const annotationHit = event.target.closest?.('[data-annotation-id]');

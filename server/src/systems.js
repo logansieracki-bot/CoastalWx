@@ -38,6 +38,7 @@ function toApi(row) {
     galeRadiusMi: row.gale_radius_mi,
     formed: !!row.formed,
     classified: !!row.classified,
+    forecastInterval: row.forecast_interval,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -89,6 +90,7 @@ const PATCHABLE_FIELDS = {
   formed: 'formed',
   classified: 'classified',
   name: 'name',
+  forecastInterval: 'forecast_interval',
 };
 
 systemsRouter.patch('/systems/:id', (req, res) => {

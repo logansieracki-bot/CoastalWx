@@ -17,6 +17,8 @@ function toApi(row) {
     hour: row.hour,
     windMph: row.wind_mph,
     spreadMi: row.spread_mi,
+    hourMode: row.hour_mode,
+    hourOverride: row.hour_override,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -36,7 +38,7 @@ forecastPointsRouter.post('/systems/:systemId/forecast-points', (req, res) => {
   const system = db.prepare('SELECT id FROM systems WHERE id = ?').get(req.params.systemId);
   if (!system) return res.status(404).json({ error: 'system not found' });
 
-  const { lon, lat, hour, windMph, spreadMi } = req.body ?? {};
+  const { lon, lat, hour, windMph, spreadMi, hourMode } = req.body ?? {};
   if (typeof lon !== 'number' || typeof lat !== 'number' || typeof hour !== 'number') {
     return res.status(400).json({ error: 'lon, lat, and hour are required numbers' });
   }
@@ -45,9 +47,9 @@ forecastPointsRouter.post('/systems/:systemId/forecast-points', (req, res) => {
   const sequence = nextSequence(req.params.systemId);
   const now = new Date().toISOString();
   db.prepare(`
-    INSERT INTO forecast_points (id, system_id, sequence, lon, lat, hour, wind_mph, spread_mi, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, req.params.systemId, sequence, lon, lat, hour, windMph ?? null, spreadMi ?? 0, now, now);
+    INSERT INTO forecast_points (id, system_id, sequence, lon, lat, hour, wind_mph, spread_mi, hour_mode, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, req.params.systemId, sequence, lon, lat, hour, windMph ?? null, spreadMi ?? 0, ['auto', 'manual', 'override'].includes(hourMode) ? hourMode : 'auto', now, now);
 
   const row = db.prepare('SELECT * FROM forecast_points WHERE id = ?').get(id);
   res.status(201).json(toApi(row));
@@ -59,6 +61,8 @@ const PATCHABLE_FIELDS = {
   hour: 'hour',
   windMph: 'wind_mph',
   spreadMi: 'spread_mi',
+  hourMode: 'hour_mode',
+  hourOverride: 'hour_override',
 };
 
 forecastPointsRouter.patch('/forecast-points/:id', (req, res) => {
