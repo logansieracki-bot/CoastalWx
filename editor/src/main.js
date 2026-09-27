@@ -9,6 +9,7 @@ import { createPointRenderer } from './pointRenderer.js';
 import { createAnnotationRenderer } from './annotationRenderer.js';
 import { createTrackConeRenderer } from './trackConeRenderer.js';
 import { createSpreadEditor } from './spreadEditor.js';
+import { createWindFieldRenderer } from './windFieldRenderer.js';
 import { milesBetween } from './trackGeometry.js';
 import { VALID_INTERVALS, nextForecastHour, recomputeForecastHours } from './forecastSchedule.js';
 import { projectLonLat } from './geo.js';
@@ -38,6 +39,7 @@ let annotations = [];
 let selectedAnnotationId = null;
 let forecastPoints = [];
 let selectedForecastPointId = null;
+let activeWindThreshold = 'gale'; // 'gale' | 'hfw' -- which quadrant handles are shown/draggable
 let drawingSession = null; // { systemId, type: 'shape'|'arrow', points: [{lon,lat}] } | null
 let lastDrawClick = null; // { x, y, t } -- manual double-click detection for the arrow tool
 let tool = 'select';
@@ -47,6 +49,7 @@ let pointRenderer = null;
 let annotationRenderer = null;
 let trackConeRenderer = null;
 let spreadEditor = null;
+let windFieldRenderer = null;
 
 async function loadGeography() {
   const [land, lakes, borders, states] = await Promise.all(
@@ -112,6 +115,7 @@ function renderMap() {
   const bounds = currentBounds();
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
   trackConeRenderer.render({ points: selectedSystemTrackPoints(), selectedForecastPointId, bounds, width: rect.width, height: rect.height });
+  windFieldRenderer.render({ system: systems.find((s) => s.id === selectedId) ?? null, activeThreshold: activeWindThreshold, bounds, width: rect.width, height: rect.height });
   annotationRenderer.render({ annotations: visibleAnnotations(), selectedAnnotationId, draft: drawingSession, systems, bounds, width: rect.width, height: rect.height });
   pointRenderer.render({ systems, selectedId, bounds, width: rect.width, height: rect.height });
   spreadEditor.render({ point: selectedForecastPoint(), bounds, width: rect.width, height: rect.height });
@@ -449,11 +453,37 @@ function renderForecastTrackSection(system) {
   selectedPanelEl.append(wrap);
 }
 
+// Which quadrant handles (NE/SE/SW/NW) are currently shown/draggable on
+// the map for the selected system's wind field -- a 2-button toggle,
+// since only one threshold's handles are ever edited at a time (both
+// envelopes still always render regardless of which is active).
+function renderWindFieldToggle(system) {
+  const wrap = document.createElement('div');
+  wrap.className = 'wind-threshold-toggle';
+  const options = [
+    { value: 'gale', label: 'Gale-force wind field' },
+    { value: 'hfw', label: 'Hurricane-force wind field' },
+  ];
+  for (const opt of options) {
+    const btn = document.createElement('button');
+    btn.textContent = opt.label;
+    btn.className = activeWindThreshold === opt.value ? 'is-active' : '';
+    btn.addEventListener('click', () => {
+      activeWindThreshold = opt.value;
+      renderSidebar();
+      renderMap();
+    });
+    wrap.append(btn);
+  }
+  return wrap;
+}
+
 // Live intensity score/category, computed from the form's current (maybe
-// unsaved) wind/gust/radius/pressure values -- this is the "calculator":
-// it updates as you type, before Save is ever clicked. Classify itself
-// still acts on the saved system record, same as Investigate/Delete.
-function renderIntensitySection(system, { windInput, gustInput, radiusInput, pressureInput }) {
+// unsaved) wind/gust/pressure values plus the system's saved gale radius
+// -- this is the "calculator": it updates as you type/drag, before Save is
+// ever clicked for wind/gust/pressure. Classify itself still acts on the
+// saved system record, same as Investigate/Delete.
+function renderIntensitySection(system, { windInput, gustInput, pressureInput }) {
   const wrap = document.createElement('div');
   wrap.className = 'annotations-section intensity-section';
   const heading = document.createElement('h4');
@@ -462,22 +492,27 @@ function renderIntensitySection(system, { windInput, gustInput, radiusInput, pre
 
   const readout = document.createElement('p');
   readout.className = 'intensity-readout';
+  // Gale radius comes from the wind-field drag handles on the map (see
+  // windThresholdMi/windFieldRenderer), which PATCH immediately on
+  // release -- unlike the typed wind/gust/pressure inputs, there's no
+  // unsaved draft value for it, so the readout uses the system's current
+  // saved value rather than a live input.
   function updateReadout() {
     const live = {
       windMph: windInput.value === '' ? null : Number(windInput.value),
       gustMph: gustInput.value === '' ? null : Number(gustInput.value),
-      galeRadiusMi: radiusInput.value === '' ? null : Number(radiusInput.value),
+      galeRadiusMi: system.galeRadiusMi,
       pressureMb: pressureInput.value === '' ? null : Number(pressureInput.value),
     };
     const score = intensityScore(live);
     if (score == null) {
-      readout.textContent = 'Enter wind, gust, radius, and pressure to calculate.';
+      readout.textContent = 'Enter wind, gust, pressure, and a gale wind field to calculate.';
     } else {
       const key = intensityCategoryKey(score);
       readout.textContent = `Score ${score.toFixed(1)} → ${CATEGORY_INFO[key].label}`;
     }
   }
-  for (const input of [windInput, gustInput, radiusInput, pressureInput]) {
+  for (const input of [windInput, gustInput, pressureInput]) {
     input.addEventListener('input', updateReadout);
   }
   updateReadout();
@@ -593,12 +628,6 @@ function renderSelectedPanel() {
   gustInput.value = system.gustMph ?? '';
   gustInput.placeholder = 'mph';
 
-  const radiusInput = document.createElement('input');
-  radiusInput.type = 'number';
-  radiusInput.step = '1';
-  radiusInput.value = system.galeRadiusMi ?? '';
-  radiusInput.placeholder = 'miles';
-
   const form = document.createElement('div');
   form.className = 'selected-form';
   form.append(
@@ -607,10 +636,11 @@ function renderSelectedPanel() {
     field('10-day formation probability (%)', prob10Input),
     field('Central pressure (mb)', pressureInput),
     field('Sustained wind (mph)', windInput),
-    field('Max gust (mph)', gustInput),
-    field('Radius of gale-force winds (mi)', radiusInput)
+    field('Max gust (mph)', gustInput)
   );
   selectedPanelEl.append(form);
+
+  selectedPanelEl.append(renderWindFieldToggle(system));
 
   const actions = document.createElement('div');
   actions.className = 'selected-actions';
@@ -626,7 +656,6 @@ function renderSelectedPanel() {
       pressureMb: pressureInput.value === '' ? null : Number(pressureInput.value),
       windMph: windInput.value === '' ? null : Number(windInput.value),
       gustMph: gustInput.value === '' ? null : Number(gustInput.value),
-      galeRadiusMi: radiusInput.value === '' ? null : Number(radiusInput.value),
     });
     systems = systems.map((s) => (s.id === updated.id ? updated : s));
     renderSidebar();
@@ -664,7 +693,7 @@ function renderSelectedPanel() {
   actions.append(deleteBtn);
   selectedPanelEl.append(actions);
 
-  renderIntensitySection(system, { windInput, gustInput, radiusInput, pressureInput });
+  renderIntensitySection(system, { windInput, gustInput, pressureInput });
   if (system.classified) {
     renderForecastTrackSection(system);
   } else {
@@ -796,6 +825,13 @@ async function handleDrawClick(geo, event) {
   renderMap();
 }
 
+// Maps a wind field quadrant drag to the system field it edits, e.g.
+// ('gale', 'ne') -> 'galeRadiusNeMi', ('hfw', 'sw') -> 'hurricaneForceRadiusSwMi'.
+function windRadiusFieldKey(threshold, quadrant) {
+  const prefix = threshold === 'hfw' ? 'hurricaneForceRadius' : 'galeRadius';
+  return `${prefix}${quadrant[0].toUpperCase()}${quadrant.slice(1)}Mi`;
+}
+
 // Owns click-to-select/deselect/place, drag-to-move-a-point, drag-to-move-
 // an-annotation-vertex, click-to-select/insert-vertex on an annotation, and
 // the shape/arrow drawing-session clicks. Pure panning on blank map space is
@@ -825,6 +861,7 @@ function setupPointerHandling() {
     // them.
     event.preventDefault();
     const spreadHandleHit = event.target.closest?.('[data-spread-handle]');
+    const windHandleHit = event.target.closest?.('[data-wind-handle]');
     const vertexHit = event.target.closest?.('[data-vertex-index]');
     const annotationHit = event.target.closest?.('[data-annotation-id]');
     const systemHit = event.target.closest?.('[data-system-id]');
@@ -832,6 +869,14 @@ function setupPointerHandling() {
 
     if (spreadHandleHit && selectedForecastPointId) {
       gesture = { kind: 'spread', pointId: selectedForecastPointId, downX: event.clientX, downY: event.clientY };
+      svg.setPointerCapture?.(event.pointerId);
+    } else if (windHandleHit) {
+      gesture = {
+        kind: 'wind-handle',
+        quadrant: windHandleHit.dataset.quadrant,
+        threshold: activeWindThreshold,
+        downX: event.clientX, downY: event.clientY, moved: false,
+      };
       svg.setPointerCapture?.(event.pointerId);
     } else if (vertexHit) {
       gesture = {
@@ -897,6 +942,18 @@ function setupPointerHandling() {
       if (!point) return;
       const geo = geoAtClient(event, svg.getBoundingClientRect());
       point.spreadMi = Math.round(Math.min(1500, Math.max(0, milesBetween(point, geo))));
+      renderMap();
+      return;
+    }
+    if (gesture?.kind === 'wind-handle') {
+      const dist = Math.hypot(event.clientX - gesture.downX, event.clientY - gesture.downY);
+      if (dist <= 4) return;
+      gesture.moved = true;
+      const system = systems.find((s) => s.id === selectedId);
+      if (!system) return;
+      const geo = geoAtClient(event, svg.getBoundingClientRect());
+      const key = windRadiusFieldKey(gesture.threshold, gesture.quadrant);
+      system[key] = Math.round(Math.min(1500, Math.max(0, milesBetween(system, geo))));
       renderMap();
       return;
     }
@@ -968,6 +1025,18 @@ function setupPointerHandling() {
       return; // a plain click on the handle (no drag) is a no-op
     }
 
+    if (current.kind === 'wind-handle') {
+      const system = systems.find((s) => s.id === selectedId);
+      if (current.moved && system) {
+        const key = windRadiusFieldKey(current.threshold, current.quadrant);
+        const updated = await api.updateSystem(system.id, { [key]: system[key] });
+        systems = systems.map((s) => (s.id === updated.id ? updated : s));
+        renderSidebar();
+        renderMap();
+      }
+      return; // a plain click on the handle (no drag) is a no-op
+    }
+
     // Blank space: a real drag here was a pan (navigation.js already moved
     // the camera) -- only act on it if it was a plain click.
     const dist = Math.hypot(event.clientX - current.downX, event.clientY - current.downY);
@@ -989,8 +1058,14 @@ async function init() {
   const geography = await loadGeography();
   mapRenderer = createMapRenderer(svg, geography);
   trackConeRenderer = createTrackConeRenderer(svg);
+  windFieldRenderer = createWindFieldRenderer(svg);
+  svg.append(windFieldRenderer.fieldLayer);
   annotationRenderer = createAnnotationRenderer(svg);
   pointRenderer = createPointRenderer(svg);
+  // windFieldRenderer's handles are appended here, after pointRenderer --
+  // see windFieldRenderer.js's own comment: they need to paint on top of
+  // the system's marker/label so a handle near either always wins clicks.
+  svg.append(windFieldRenderer.editorLayer);
   spreadEditor = createSpreadEditor(svg);
 
   attachNavigation({
@@ -1007,7 +1082,8 @@ async function init() {
       !event.target.closest?.('[data-annotation-id]') &&
       !event.target.closest?.('[data-vertex-index]') &&
       !event.target.closest?.('[data-forecast-point-id]') &&
-      !event.target.closest?.('[data-spread-handle]'),
+      !event.target.closest?.('[data-spread-handle]') &&
+      !event.target.closest?.('[data-wind-handle]'),
   });
 
   setupPointerHandling();

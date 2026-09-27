@@ -238,6 +238,29 @@ button:disabled:hover { border-color: var(--ui-border); }
   vector-effect: non-scaling-stroke; cursor: ew-resize;
 }
 
+/* Wind field envelope + quadrant drag handles, for the selected system's
+   current position. Colors carried over from the old prototype's ts/hu
+   (tropical storm / hurricane force) scheme, now gale/hfw. */
+.wind-field { vector-effect: non-scaling-stroke; pointer-events: none; stroke-width: 1.35px; }
+.wind-field-gale { fill: rgba(240, 188, 74, .46); stroke: #c9912b; }
+.wind-field-hfw { fill: rgba(159, 72, 72, .5); stroke: #8f4141; }
+.wind-guide {
+  stroke: rgba(29, 48, 70, .45); stroke-width: 1px;
+  stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; pointer-events: none;
+}
+.wind-handle { stroke: #fff; stroke-width: 1.5px; vector-effect: non-scaling-stroke; cursor: grab; }
+.wind-handle:active { cursor: grabbing; }
+.wind-handle-gale { fill: #c9912b; }
+.wind-handle-hfw { fill: #8f4141; }
+.wind-handle-label {
+  fill: #111; font-weight: 800; font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  paint-order: stroke; stroke: rgba(255, 255, 255, .88); stroke-width: 2px;
+  vector-effect: non-scaling-stroke; pointer-events: none;
+}
+
+.wind-threshold-toggle { display: flex; gap: 6px; margin: 10px 0; }
+.wind-threshold-toggle button { flex: 1; font-size: 12px; padding: 7px 6px; }
+
 .annotations-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--ui-border); }
 .annotations-section h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--ui-muted); }
 .selected-annotation-panel .empty-hint { margin: 0 0 10px; }

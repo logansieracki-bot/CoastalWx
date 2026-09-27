@@ -18,6 +18,17 @@ function stageLabel(stage) {
   return stage === 'invest' ? 'Invest' : 'Disturbance';
 }
 
+// A single representative gale radius for intensityScore's formula
+// (unchanged, still takes one number): the average of whichever quadrants
+// have been set via the wind field drag handles, or null until at least
+// one has -- same "not yet filled in" signal the plain number field used
+// to give before it was replaced by the quadrant system.
+function averageRadius(ne, se, sw, nw) {
+  const quadrants = [ne, se, sw, nw];
+  if (quadrants.every((v) => v == null)) return null;
+  return quadrants.reduce((sum, v) => sum + (v ?? 0), 0) / 4;
+}
+
 function toApi(row) {
   return {
     id: row.id,
@@ -35,7 +46,15 @@ function toApi(row) {
     pressureMb: row.pressure_mb,
     windMph: row.wind_mph,
     gustMph: row.gust_mph,
-    galeRadiusMi: row.gale_radius_mi,
+    galeRadiusNeMi: row.gale_radius_ne_mi,
+    galeRadiusSeMi: row.gale_radius_se_mi,
+    galeRadiusSwMi: row.gale_radius_sw_mi,
+    galeRadiusNwMi: row.gale_radius_nw_mi,
+    hurricaneForceRadiusNeMi: row.hurricane_force_radius_ne_mi,
+    hurricaneForceRadiusSeMi: row.hurricane_force_radius_se_mi,
+    hurricaneForceRadiusSwMi: row.hurricane_force_radius_sw_mi,
+    hurricaneForceRadiusNwMi: row.hurricane_force_radius_nw_mi,
+    galeRadiusMi: averageRadius(row.gale_radius_ne_mi, row.gale_radius_se_mi, row.gale_radius_sw_mi, row.gale_radius_nw_mi),
     formed: !!row.formed,
     classified: !!row.classified,
     forecastInterval: row.forecast_interval,
@@ -86,7 +105,14 @@ const PATCHABLE_FIELDS = {
   pressureMb: 'pressure_mb',
   windMph: 'wind_mph',
   gustMph: 'gust_mph',
-  galeRadiusMi: 'gale_radius_mi',
+  galeRadiusNeMi: 'gale_radius_ne_mi',
+  galeRadiusSeMi: 'gale_radius_se_mi',
+  galeRadiusSwMi: 'gale_radius_sw_mi',
+  galeRadiusNwMi: 'gale_radius_nw_mi',
+  hurricaneForceRadiusNeMi: 'hurricane_force_radius_ne_mi',
+  hurricaneForceRadiusSeMi: 'hurricane_force_radius_se_mi',
+  hurricaneForceRadiusSwMi: 'hurricane_force_radius_sw_mi',
+  hurricaneForceRadiusNwMi: 'hurricane_force_radius_nw_mi',
   formed: 'formed',
   classified: 'classified',
   name: 'name',

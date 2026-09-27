@@ -108,6 +108,16 @@ function stageLabel(stage) {
   return stage === 'invest' ? 'Invest' : 'Disturbance';
 }
 
+// Mirrors server/src/systems.js's averageRadius exactly -- a single
+// representative gale radius for intensityScore's formula, derived from
+// whichever quadrants have been set via the wind field drag handles, or
+// null until at least one has been.
+function averageRadius(ne, se, sw, nw) {
+  const quadrants = [ne, se, sw, nw];
+  if (quadrants.every((v) => v == null)) return null;
+  return quadrants.reduce((sum, v) => sum + (v ?? 0), 0) / 4;
+}
+
 function toApi(row) {
   return {
     id: row.id,
@@ -125,7 +135,15 @@ function toApi(row) {
     pressureMb: row.pressureMb ?? null,
     windMph: row.windMph ?? null,
     gustMph: row.gustMph ?? null,
-    galeRadiusMi: row.galeRadiusMi ?? null,
+    galeRadiusNeMi: row.galeRadiusNeMi ?? null,
+    galeRadiusSeMi: row.galeRadiusSeMi ?? null,
+    galeRadiusSwMi: row.galeRadiusSwMi ?? null,
+    galeRadiusNwMi: row.galeRadiusNwMi ?? null,
+    hurricaneForceRadiusNeMi: row.hurricaneForceRadiusNeMi ?? null,
+    hurricaneForceRadiusSeMi: row.hurricaneForceRadiusSeMi ?? null,
+    hurricaneForceRadiusSwMi: row.hurricaneForceRadiusSwMi ?? null,
+    hurricaneForceRadiusNwMi: row.hurricaneForceRadiusNwMi ?? null,
+    galeRadiusMi: averageRadius(row.galeRadiusNeMi, row.galeRadiusSeMi, row.galeRadiusSwMi, row.galeRadiusNwMi),
     formed: !!row.formed,
     classified: !!row.classified,
     forecastInterval: row.forecastInterval ?? 12,
@@ -150,7 +168,9 @@ const local = {
       formationProbability2dayPct: formationProbability2dayPct ?? null,
       formationProbability5dayPct: formationProbability5dayPct ?? null,
       formationProbability10dayPct: formationProbability10dayPct ?? null,
-      pressureMb: null, windMph: null, gustMph: null, galeRadiusMi: null,
+      pressureMb: null, windMph: null, gustMph: null,
+      galeRadiusNeMi: null, galeRadiusSeMi: null, galeRadiusSwMi: null, galeRadiusNwMi: null,
+      hurricaneForceRadiusNeMi: null, hurricaneForceRadiusSeMi: null, hurricaneForceRadiusSwMi: null, hurricaneForceRadiusNwMi: null,
       formed: false, classified: false, forecastInterval: 12,
       createdAt: now, updatedAt: now,
     };
