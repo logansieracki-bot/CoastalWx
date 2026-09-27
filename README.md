@@ -55,33 +55,44 @@ coordinates just work.
 
 ## Deployment
 
-The **editor** auto-deploys to GitHub Pages via
-`.github/workflows/deploy-pages.yml` on every push to this branch, and is
-what you get at the site root. The earlier sample-data public forecast page
-still deploys too, just at `/forecast/`, so it isn't lost.
+Two separate, independent deployments exist side by side:
 
-Pages only serves static files -- no server, no database -- so the deployed
-editor can't reach the real backend described below. It detects that at
-startup and falls back to saving in your browser's own `localStorage`
-instead, with an honest banner saying so; nothing about the editor is
-broken or non-functional there, it's just local-only-per-browser until
-real hosting exists. Run it with a real backend (see below) for shared,
-durable storage.
+- **GitHub Pages** (`.github/workflows/deploy-pages.yml`, every push to
+  this branch): a static-only build of the **editor**, at the site root,
+  with the earlier sample-data public forecast page still at `/forecast/`.
+  Pages serves static files only -- no server, no database -- so this
+  deployed editor can't reach a real backend. It detects that at startup
+  and falls back to saving in your browser's own `localStorage` instead,
+  with an honest banner saying so; nothing about the editor is broken or
+  non-functional there, it's just local-only-per-browser. This deployment
+  intentionally has no accounts/login of its own (local-only mode always
+  shows logged-out, and write actions explain they're unavailable) -- it's
+  a zero-backend instant demo, not the real, shared tool.
 
-One manual, one-time step this repo needs (not something the workflow can
-do on its own): in **Settings -> Pages -> Build and deployment**, set
-**Source** to **GitHub Actions**.
+  One manual, one-time step this repo needs (not something the workflow
+  can do on its own): in **Settings -> Pages -> Build and deployment**,
+  set **Source** to **GitHub Actions**.
+
+- **Railway** (`railway.json`, connected to this repo for auto-deploy on
+  push): the real, hosted, multi-user version, backed by the same
+  `/server` + SQLite described below, on a persistent volume. This is
+  where real forecaster accounts, storm naming, and advisories actually
+  live. Requires `server/package.json`'s `engines.node` to resolve to
+  Node 22+ (for `node:sqlite`), a mounted volume with
+  `NOREASTERCASTER_DB` pointed at it, and an Owner account provisioned
+  once via `server/scripts/create-user.js` (see below).
 
 ## The editor (`/editor` + `/server`)
 
-`index.html` at the repo root is the public-facing page above, still running
-on sample data. `/editor` and `/server` are the start of the actual
-forecaster tool that will publish to it: a pannable/zoomable map (top
-toolbar, left data panel, map filling the rest) backed by a real database,
-where a "system" starts life as a **Disturbance** — a probability-colored
-X you place on the map — and progresses through Invest → Formed →
-Classified (with an intensity category) as later milestones add the rest
-of the lifecycle.
+`index.html` at the repo root is the original sample-data page from
+earlier in this project — it's what GitHub Pages still serves at
+`/forecast/` (see Deployment above), superseded everywhere else by the
+real `/public` page described in **Public site**. `/editor` and `/server`
+are the actual forecaster tool: a pannable/zoomable map (top toolbar, left
+data panel, map filling the rest) backed by a real database, where a
+"system" starts life as a **Disturbance** — a probability-colored X you
+place on the map — and progresses through Invest → Formed → Classified
+(with an intensity category, and an automatically assigned storm name).
 
 Disturbances (place, drag, edit 2/5/10-day formation probability, pressure,
 and wind) and per-system shapes/arrows (freeform smoothed shape and arrow
@@ -143,9 +154,71 @@ diamond. This replaced the old single "gale radius" number field — the
 intensity calculator now averages the four gale quadrants for that part
 of its formula.
 
-Advisories, downgrading and the rest of the full classification workflow,
-watches/warnings, and auth are still later milestones on top of this same
-foundation.
+Downgrading and watches/warnings are still later milestones on top of this
+same foundation.
+
+## Accounts & roles
+
+Write access (anything beyond viewing) requires logging in. Four roles,
+each a superset of the one below it:
+
+- **Owner** — everything, including promoting/demoting roles. Exactly one
+  account starts as Owner (provisioned via the bootstrap script below).
+- **Admin** — can create new accounts (defaulting to Junior Forecaster;
+  only Owner can hand out a higher role or change one later), plus
+  everything Forecaster can.
+- **Forecaster** — Investigate/Classify/Delete a system, publish or
+  emergency-cancel an advisory, plus everything Junior Forecaster can.
+- **Junior Forecaster** — routine data entry: disturbances, forecast
+  points, wind field, formation probabilities, wind/gust/pressure
+  readings, saving.
+
+The very first (Owner) account can't be created through the app itself
+(there's nobody logged in yet to create it) — it's provisioned directly
+against the database:
+
+```
+node server/scripts/create-user.js <username> <password> ["display name"] [role]
+```
+
+On a live deployment this needs to run *inside* the actual container
+(`railway ssh -- node server/scripts/create-user.js ...`), not against a
+local copy — `railway run` executes locally with Railway's environment
+variables injected, which wouldn't touch the real mounted database.
+Passwords are hashed (scrypt) immediately and never written to a file,
+commit, or log in plain text. Once an Owner/Admin account exists, use the
+Accounts panel in the editor sidebar for every account after that.
+
+## Storm naming
+
+Once a system is **Classified**, it's automatically given the next unused
+name for its season from the `storm_names` table (seeded with a
+placeholder alphabetical list, A through W skipping Q/U/X/Y/Z — edit that
+table directly for real names). A name is permanently retired the moment
+it's assigned, even if that system later weakens.
+
+## Advisories
+
+Once classified, a system's panel gets a **Publish Advisory** button
+(Forecaster role or higher, confirmation-gated) that snapshots its full
+current data and forecast track as an immutable, auto-numbered record.
+For exactly one hour after publishing, that advisory shows an emergency
+**Cancel** button (same role, a second confirmation) that fully and
+permanently deletes it — not a retraction, a true undo. After the hour,
+it's permanent. The one-hour window is enforced by the server itself, not
+just hidden client-side once it passes.
+
+## Public site
+
+The bare domain serves a separate, real, **read-only** public page (not
+the editor) — a clean map of every disturbance/invest/classified system,
+a click-to-open info panel, and a persistent "latest advisory" time for
+whichever system is selected. It shares the editor's own map/marker/
+cone/wind-field rendering code (imported directly, not duplicated) but
+none of its editing machinery — there is no write-capable UI on this page
+at all, not even a disabled one. Before a system is Classified, its panel
+shows only formation probabilities — no intensity or category information
+appears until it's active.
 
 To run it:
 
@@ -155,13 +228,12 @@ npm install
 npm start
 ```
 
-Then open `http://localhost:3000` — the server serves the editor's static
-files and its JSON API (`/api/systems`) from one process, so there's no
-separate dev server or CORS to think about. Data lives in a local SQLite
-file (`server/data/`, gitignored) via Node's built-in `node:sqlite` — no
-external database to install for development. Production hosting (a real
-Postgres or similar, plus auth so the editor isn't publicly writable) is a
-later, separate decision.
+Then open `http://localhost:3000` for the **public page**, or
+`http://localhost:3000/editor` for the **forecaster tool** — one process
+serves both, plus the JSON API (`/api/*`), so there's no separate dev
+server or CORS to think about. Data lives in a local SQLite file
+(`server/data/`, gitignored) via Node's built-in `node:sqlite` — no
+external database to install for development.
 
 The map geometry (`editor/assets/*.geojson`) and the pan/zoom/rendering
 approach are adapted from an earlier prototype of this same idea, cropped
