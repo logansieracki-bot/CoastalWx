@@ -226,6 +226,25 @@ permanently deletes it — not a retraction, a true undo. After the hour,
 it's permanent. The one-hour window is enforced by the server itself, not
 just hidden client-side once it passes.
 
+## Discussions
+
+Selecting any system opens a text callout right on the map, next to its
+marker, until it's deselected — a plain-language companion to the
+numbers in the sidebar, styled after NHC's own text products:
+
+- **Disturbance/Invest** — a free-text discussion (editable by any of the
+  four roles, saved alongside the rest of that system's routine data)
+  plus its three formation-probability windows and a "Forecaster:" byline
+  naming whoever last saved it.
+- **Classified** — the *latest advisory's* discussion (written at publish
+  time, immutable afterward like the rest of that advisory) under a
+  "`<name>` Discussion (Advisory `N`)" heading, followed by a
+  FORECAST POSITIONS AND MAX WINDS table built from that same advisory's
+  frozen snapshot: each position's valid time, lat/lon, and wind in both
+  knots and mph, with an optional manual OVER WATER / INLAND / DISSIPATED
+  tag per forecast point (set from a small select on that point's row in
+  the Forecast track section).
+
 ## Public site
 
 The bare domain serves a separate, real, **read-only** site (`/public`) —
