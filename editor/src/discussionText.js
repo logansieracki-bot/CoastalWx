@@ -20,12 +20,6 @@ function formatValidTime(referenceIso, hour) {
   return `${dd}/${hh}${mm}Z`;
 }
 
-// NHC-style: wind is authored in mph (this app's own unit throughout) but
-// always reported alongside knots, rounded to the nearest 5 kt.
-function mphToKt(mph) {
-  return Math.round(mph / 1.15078 / 5) * 5;
-}
-
 const STATUS_SUFFIX = {
   over_water: '...OVER WATER',
   inland: '...INLAND',
@@ -59,9 +53,7 @@ export function buildForecastPositionsText(system, forecastPoints, referenceIso)
     const lon = formatLon(r.lon).padStart(6);
     let windPart = '';
     if (r.windMph != null) {
-      const mph = Math.round(r.windMph);
-      const kt = mphToKt(mph);
-      windPart = `${String(kt).padStart(3)} KT ${String(mph).padStart(3)} MPH`;
+      windPart = `${String(Math.round(r.windMph)).padStart(3)} MPH`;
     }
     const suffix = r.status ? STATUS_SUFFIX[r.status] : '';
     return `${label}  ${time} ${lat} ${lon}  ${windPart}${suffix}`;

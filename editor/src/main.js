@@ -10,11 +10,12 @@ import { createAnnotationRenderer } from './annotationRenderer.js';
 import { createTrackConeRenderer } from './trackConeRenderer.js';
 import { createSpreadEditor } from './spreadEditor.js';
 import { createWindFieldRenderer } from './windFieldRenderer.js';
-import { milesBetween } from './trackGeometry.js';
+import { milesBetween, buildConeDisks } from './trackGeometry.js';
 import { VALID_INTERVALS, nextForecastHour, recomputeForecastHours } from './forecastSchedule.js';
 import { projectLonLat } from './geo.js';
 import { api, detectBackend } from './api.js';
 import { buildDisturbanceCalloutText, buildClassifiedCalloutText } from './discussionText.js';
+import { placeCallout } from './calloutPlacement.js';
 
 const svg = document.getElementById('map');
 const systemsListEl = document.getElementById('systems-list');
@@ -141,6 +142,62 @@ function latestAdvisoryFor(systemId) {
     .reduce((latest, a) => (!latest || a.number > latest.number ? a : latest), null);
 }
 
+// Bounding boxes (map-container-relative, matching the coordinate space
+// the callout's own left/top are set in) of everything on the map the
+// callout shouldn't cover -- every system's marker/label, any track/wind
+// field, and any visible shape/arrow. Read from the real rendered
+// elements rather than recomputed from their data, so this holds up
+// regardless of that element's own shape, size, or position.
+//
+// The cone itself is a deliberate exception (see coneObstacleRect): it's
+// painted as a full-map-bounds <rect> clipped by an SVG <mask>
+// (trackConeRenderer.js's own technique for unioning many ellipses), and
+// a mask changes what's painted, not the element's geometry -- so
+// getBoundingClientRect() on it always reports the *entire visible map*,
+// not the cone's actual shape. Using that as an obstacle would make
+// every position on the map count as "covered."
+const OBSTACLE_SELECTORS = [
+  '.point-x-outline', '.point-label', '.forecast-track', '.forecast-point-marker',
+  '.wind-field',
+  '.annotation-shape-fill', '.annotation-arrow-line',
+];
+function collectObstacleRects(mapRect) {
+  const rects = [];
+  for (const selector of OBSTACLE_SELECTORS) {
+    for (const el of svg.querySelectorAll(selector)) {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        rects.push({ left: r.left - mapRect.left, top: r.top - mapRect.top, right: r.right - mapRect.left, bottom: r.bottom - mapRect.top });
+      }
+    }
+  }
+  return rects;
+}
+
+// The cone's real screen-space extent, computed the same way
+// trackConeRenderer.js builds its mask ellipses (buildConeDisks) instead
+// of read from the DOM -- see collectObstacleRects's comment for why.
+// One combined box (not one rect per disk) is precise enough for
+// placement purposes and far cheaper.
+function coneObstacleRect(trackPoints, bounds, width, height) {
+  if (!trackPoints || trackPoints.length < 2) return null;
+  const disks = buildConeDisks(trackPoints, 24);
+  if (!disks.length) return null;
+  let west = Infinity, east = -Infinity, south = Infinity, north = -Infinity;
+  for (const d of disks) {
+    west = Math.min(west, d.cx - d.rx);
+    east = Math.max(east, d.cx + d.rx);
+    south = Math.min(south, -d.cy - d.ry);
+    north = Math.max(north, -d.cy + d.ry);
+  }
+  const topLeft = projectLonLat(west, north, bounds, width, height);
+  const bottomRight = projectLonLat(east, south, bounds, width, height);
+  return {
+    left: Math.min(topLeft.x, bottomRight.x), right: Math.max(topLeft.x, bottomRight.x),
+    top: Math.min(topLeft.y, bottomRight.y), bottom: Math.max(topLeft.y, bottomRight.y),
+  };
+}
+
 // Text callout shown on the map next to the selected system, until it's
 // deselected -- a disturbance/invest discussion form pre-classification, or
 // the latest advisory's discussion + forecast-positions text once
@@ -161,17 +218,15 @@ function renderDiscussionCallout() {
 
   const bounds = currentBounds();
   const { x, y } = projectLonLat(system.lon, system.lat, bounds, rect.width, rect.height);
-  const margin = 12;
-  const gap = 40; // clear of the marker itself and its label below it
-  const calloutW = discussionCalloutEl.offsetWidth;
-  const calloutH = discussionCalloutEl.offsetHeight;
-
-  let left = x + gap;
-  if (left + calloutW + margin > rect.width) left = x - gap - calloutW;
-  left = Math.max(margin, Math.min(left, rect.width - calloutW - margin));
-
-  let top = y - calloutH / 2 - 10;
-  top = Math.max(margin, Math.min(top, rect.height - calloutH - margin));
+  const obstacles = collectObstacleRects(rect);
+  const cone = coneObstacleRect(selectedSystemTrackPoints(), bounds, rect.width, rect.height);
+  if (cone) obstacles.push(cone);
+  const { left, top } = placeCallout({
+    markerX: x, markerY: y,
+    width: discussionCalloutEl.offsetWidth, height: discussionCalloutEl.offsetHeight,
+    mapWidth: rect.width, mapHeight: rect.height,
+    obstacles,
+  });
 
   discussionCalloutEl.style.left = `${left}px`;
   discussionCalloutEl.style.top = `${top}px`;

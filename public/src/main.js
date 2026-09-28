@@ -21,6 +21,8 @@ import { createAnnotationRenderer } from '../editor/src/annotationRenderer.js';
 import { createTrackConeRenderer } from '../editor/src/trackConeRenderer.js';
 import { createWindFieldRenderer } from '../editor/src/windFieldRenderer.js';
 import { buildDisturbanceCalloutText, buildClassifiedCalloutText } from '../editor/src/discussionText.js';
+import { placeCallout } from '../editor/src/calloutPlacement.js';
+import { buildConeDisks } from '../editor/src/trackGeometry.js';
 
 const POLL_INTERVAL_MS = 60000;
 
@@ -218,6 +220,51 @@ function visibleAnnotations() {
   return annotations.filter((a) => !systems.find((s) => s.id === a.systemId)?.classified);
 }
 
+// Bounding boxes (map-container-relative) of everything on the map the
+// callout shouldn't cover -- mirrors editor/src/main.js's
+// collectObstacleRects exactly (same selectors, same shared renderers).
+// The cone is deliberately excluded here too -- see coneObstacleRect and
+// the matching comment in editor/src/main.js for why (it's a full-map
+// <rect> clipped by an SVG mask, so its real DOM bounding box is the
+// entire visible map, not its painted shape).
+const OBSTACLE_SELECTORS = [
+  '.point-x-outline', '.point-label', '.forecast-track', '.forecast-point-marker',
+  '.wind-field',
+  '.annotation-shape-fill', '.annotation-arrow-line',
+];
+function collectObstacleRects(mapRect) {
+  const rects = [];
+  for (const selector of OBSTACLE_SELECTORS) {
+    for (const el of svg.querySelectorAll(selector)) {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        rects.push({ left: r.left - mapRect.left, top: r.top - mapRect.top, right: r.right - mapRect.left, bottom: r.bottom - mapRect.top });
+      }
+    }
+  }
+  return rects;
+}
+
+// Mirrors editor/src/main.js's coneObstacleRect exactly.
+function coneObstacleRect(trackPoints, bounds, width, height) {
+  if (!trackPoints || trackPoints.length < 2) return null;
+  const disks = buildConeDisks(trackPoints, 24);
+  if (!disks.length) return null;
+  let west = Infinity, east = -Infinity, south = Infinity, north = -Infinity;
+  for (const d of disks) {
+    west = Math.min(west, d.cx - d.rx);
+    east = Math.max(east, d.cx + d.rx);
+    south = Math.min(south, -d.cy - d.ry);
+    north = Math.max(north, -d.cy + d.ry);
+  }
+  const topLeft = projectLonLat(west, north, bounds, width, height);
+  const bottomRight = projectLonLat(east, south, bounds, width, height);
+  return {
+    left: Math.min(topLeft.x, bottomRight.x), right: Math.max(topLeft.x, bottomRight.x),
+    top: Math.min(topLeft.y, bottomRight.y), bottom: Math.max(topLeft.y, bottomRight.y),
+  };
+}
+
 // Same on-map callout as the editor (see editor/src/main.js's
 // renderDiscussionCallout + editor/src/discussionText.js), reusing the
 // exact same text builders -- shown here too since a forecaster's
@@ -235,17 +282,15 @@ function renderDiscussionCallout(selected, bounds, rect) {
   discussionCalloutEl.hidden = false;
 
   const { x, y } = projectLonLat(selected.lon, selected.lat, bounds, rect.width, rect.height);
-  const margin = 12;
-  const gap = 40;
-  const calloutW = discussionCalloutEl.offsetWidth;
-  const calloutH = discussionCalloutEl.offsetHeight;
-
-  let left = x + gap;
-  if (left + calloutW + margin > rect.width) left = x - gap - calloutW;
-  left = Math.max(margin, Math.min(left, rect.width - calloutW - margin));
-
-  let top = y - calloutH / 2 - 10;
-  top = Math.max(margin, Math.min(top, rect.height - calloutH - margin));
+  const obstacles = collectObstacleRects(rect);
+  const cone = coneObstacleRect(trackPointsFor(selected), bounds, rect.width, rect.height);
+  if (cone) obstacles.push(cone);
+  const { left, top } = placeCallout({
+    markerX: x, markerY: y,
+    width: discussionCalloutEl.offsetWidth, height: discussionCalloutEl.offsetHeight,
+    mapWidth: rect.width, mapHeight: rect.height,
+    obstacles,
+  });
 
   discussionCalloutEl.style.left = `${left}px`;
   discussionCalloutEl.style.top = `${top}px`;
