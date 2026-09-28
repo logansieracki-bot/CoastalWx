@@ -162,7 +162,7 @@ function renderDiscussionCallout() {
   const bounds = currentBounds();
   const { x, y } = projectLonLat(system.lon, system.lat, bounds, rect.width, rect.height);
   const margin = 12;
-  const gap = 16;
+  const gap = 40; // clear of the marker itself and its label below it
   const calloutW = discussionCalloutEl.offsetWidth;
   const calloutH = discussionCalloutEl.offsetHeight;
 
@@ -170,7 +170,7 @@ function renderDiscussionCallout() {
   if (left + calloutW + margin > rect.width) left = x - gap - calloutW;
   left = Math.max(margin, Math.min(left, rect.width - calloutW - margin));
 
-  let top = y - calloutH / 2;
+  let top = y - calloutH / 2 - 10;
   top = Math.max(margin, Math.min(top, rect.height - calloutH - margin));
 
   discussionCalloutEl.style.left = `${left}px`;

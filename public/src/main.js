@@ -1,7 +1,8 @@
 // Read-only public viewer: reuses the editor's own rendering modules
-// as-is (same basemap, marker, cone, and wind-field visuals) with none of
-// its editing machinery -- no toolbar, no drag gestures, no annotations.
-// These imports are relative (not absolute /editor/... paths) so they
+// as-is (same basemap, marker, point, cone, wind-field, and annotation
+// visuals) with none of its editing machinery -- no toolbar, no drag
+// gestures, no vertex handles. These imports are relative (not absolute
+// /editor/... paths) so they
 // keep resolving correctly under a path-prefixed deployment too -- e.g.
 // GitHub Pages serves this repo at /NorEASterCaster/, not the domain
 // root, so an absolute /editor/src/... path would 404 there even though
@@ -15,6 +16,7 @@ import { createViewState, getAspectFittedBounds } from '../editor/src/viewState.
 import { attachNavigation } from '../editor/src/navigation.js';
 import { createMapRenderer } from '../editor/src/mapRenderer.js';
 import { createPointRenderer } from '../editor/src/pointRenderer.js';
+import { createAnnotationRenderer } from '../editor/src/annotationRenderer.js';
 import { createTrackConeRenderer } from '../editor/src/trackConeRenderer.js';
 import { createWindFieldRenderer } from '../editor/src/windFieldRenderer.js';
 
@@ -93,6 +95,19 @@ const DEMO_ADVISORIES = [
     issuedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), issuedByUserId: 'demo', cancelable: false,
   },
 ];
+// A shape + an arrow on the non-classified demo disturbance -- demo-1 is
+// already classified, and classified systems' annotations are hidden (see
+// visibleAnnotations()), same rule as the editor.
+const DEMO_ANNOTATIONS = [
+  {
+    id: 'demo-ann-1', systemId: 'demo-2', type: 'shape',
+    points: [{ lon: -58, lat: 25 }, { lon: -50, lat: 24 }, { lon: -52, lat: 31 }, { lon: -59, lat: 30 }],
+  },
+  {
+    id: 'demo-ann-2', systemId: 'demo-2', type: 'arrow',
+    points: [{ lon: -55, lat: 27.5 }, { lon: -48, lat: 33 }],
+  },
+];
 
 const svg = document.getElementById('map');
 const demoBannerEl = document.getElementById('demo-banner');
@@ -103,11 +118,13 @@ const systemListEmptyEl = document.getElementById('system-list-empty');
 let systems = [];
 let forecastPoints = [];
 let advisories = [];
+let annotations = [];
 let selectedId = null;
 let usingDemoData = false;
 let viewState = createViewState(INITIAL_BOUNDS);
 let mapRenderer = null;
 let pointRenderer = null;
+let annotationRenderer = null;
 let trackConeRenderer = null;
 let windFieldRenderer = null;
 
@@ -132,17 +149,22 @@ async function fetchJson(path) {
 
 async function loadData() {
   try {
-    const [nextSystems, nextForecastPoints, nextAdvisories] = await Promise.all([
-      fetchJson('api/systems'), fetchJson('api/forecast-points'), fetchJson('api/advisories'),
+    const [nextSystems, nextForecastPoints, nextAdvisories, nextAnnotations] = await Promise.all([
+      fetchJson('api/systems'), fetchJson('api/forecast-points'), fetchJson('api/advisories'), fetchJson('api/annotations'),
     ]);
     systems = nextSystems;
     forecastPoints = nextForecastPoints;
     advisories = nextAdvisories;
+    // Wire format is [[lon, lat], ...] pairs (see server/src/annotations.js);
+    // the renderer wants {lon, lat} objects, same conversion the editor's
+    // own api.js does for its remote backend.
+    annotations = nextAnnotations.map((a) => ({ ...a, points: a.points.map(([lon, lat]) => ({ lon, lat })) }));
     usingDemoData = false;
   } catch {
     systems = DEMO_SYSTEMS;
     forecastPoints = DEMO_FORECAST_POINTS;
     advisories = DEMO_ADVISORIES;
+    annotations = DEMO_ANNOTATIONS;
     usingDemoData = true;
   }
   demoBannerEl.hidden = !usingDemoData;
@@ -178,6 +200,13 @@ function latestAdvisoryFor(systemId) {
   return own.reduce((latest, a) => (!latest || new Date(a.issuedAt) > new Date(latest.issuedAt) ? a : latest), null);
 }
 
+// Mirrors editor/src/main.js's visibleAnnotations() -- a classified
+// system's shapes/arrows are hidden, its forecast track/cone replacing
+// them as its visual representation, same rule here as in the editor.
+function visibleAnnotations() {
+  return annotations.filter((a) => !systems.find((s) => s.id === a.systemId)?.classified);
+}
+
 function renderMap() {
   const rect = svg.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return;
@@ -186,6 +215,7 @@ function renderMap() {
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
   trackConeRenderer.render({ points: trackPointsFor(selected), selectedForecastPointId: null, bounds, width: rect.width, height: rect.height });
   windFieldRenderer.render({ system: selected, activeThreshold: null, bounds, width: rect.width, height: rect.height });
+  annotationRenderer.render({ annotations: visibleAnnotations(), selectedAnnotationId: null, draft: null, systems, bounds, width: rect.width, height: rect.height });
   pointRenderer.render({ systems, selectedId, bounds, width: rect.width, height: rect.height });
 }
 
@@ -333,6 +363,7 @@ async function init() {
   windFieldRenderer = createWindFieldRenderer(svg);
   svg.append(windFieldRenderer.fieldLayer); // under the cone/markers -- see windFieldRenderer.js
   trackConeRenderer = createTrackConeRenderer(svg);
+  annotationRenderer = createAnnotationRenderer(svg);
   pointRenderer = createPointRenderer(svg);
 
   attachNavigation({

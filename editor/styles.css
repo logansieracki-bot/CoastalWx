@@ -92,6 +92,10 @@ h3 { margin: 0 0 4px; font-size: 14px; }
 .toolbar__title { display: flex; align-items: baseline; gap: 8px; margin-right: 10px; }
 .toolbar__title strong { font-size: 15px; }
 .toolbar__title span { color: var(--ui-muted); font-size: 12px; }
+.toolbar__mark {
+  display: flex; align-items: center; justify-content: center; align-self: center;
+  width: 22px; height: 22px; border-radius: 7px; background: #0a1628; flex-shrink: 0;
+}
 .toolbar__spacer { flex: 1; }
 .placement-hint {
   font-size: 12.5px;
