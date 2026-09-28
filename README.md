@@ -252,7 +252,7 @@ deliberately distinct from the editor, not a reskinned version of it: a
 dark, map-first design with a persistent sidebar listing every
 disturbance/invest/classified system as an expandable card (click a card,
 or its marker on the map, to open its detail inline). It shares the
-editor's own map/marker/cone/wind-field rendering code (imported
+editor's own map/marker/cone/wind-field/annotation rendering code (imported
 directly, not duplicated) but none of its editing machinery — there is no
 write-capable UI on this page at all, not even a disabled one. Before a
 system is Classified, its card shows only formation probabilities — no
