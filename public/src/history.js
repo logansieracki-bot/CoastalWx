@@ -6,7 +6,7 @@
 // author. Reuses the editor's own map + constants, same relative-import
 // reasoning as public/src/main.js (see its own header comment).
 import {
-  CATEGORY_INFO, displayLabel, systemColor,
+  CATEGORY_INFO, categorySymbol, displayLabel, systemColor,
 } from '../editor/src/constants.js';
 import { fitBoundsToAspect } from '../editor/src/geo.js';
 import { createMapRenderer } from '../editor/src/mapRenderer.js';
@@ -204,18 +204,25 @@ function statTile(label, value) {
   return wrap;
 }
 
+// A vertical color-scale bar (severity ascending bottom-to-top), not a
+// stacked swatch+label list -- fills real chart chrome instead of a small
+// corner box, mirroring the reference design's own scale bar. Each
+// segment carries only its short symbol (categorySymbol, the same one-
+// character abbreviation the marker glyphs already use); the full name
+// is a hover tooltip via `title`, and the container's aria-label keeps it
+// readable without hovering.
 function renderLegend() {
   legendEl.replaceChildren();
-  for (const key of CATEGORY_ORDER) {
-    const item = document.createElement('div');
-    item.className = 'history-legend__item';
-    const swatch = document.createElement('span');
-    swatch.className = 'history-legend__swatch';
-    swatch.style.background = CATEGORY_INFO[key].color;
+  for (const key of [...CATEGORY_ORDER].reverse()) {
+    const seg = document.createElement('div');
+    seg.className = 'history-scale__seg';
+    seg.style.background = CATEGORY_INFO[key].color;
+    seg.title = CATEGORY_INFO[key].label;
     const label = document.createElement('span');
-    label.textContent = CATEGORY_INFO[key].label;
-    item.append(swatch, label);
-    legendEl.append(item);
+    label.className = 'history-scale__label';
+    label.textContent = categorySymbol(key) ?? '';
+    seg.append(label);
+    legendEl.append(seg);
   }
 }
 
