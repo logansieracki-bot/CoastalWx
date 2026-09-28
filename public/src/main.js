@@ -95,17 +95,21 @@ const DEMO_ADVISORIES = [
     issuedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), issuedByUserId: 'demo', cancelable: false,
   },
 ];
-// A shape + an arrow on the non-classified demo disturbance -- demo-1 is
-// already classified, and classified systems' annotations are hidden (see
-// visibleAnnotations()), same rule as the editor.
+// A shape + an arrow on the non-classified demo disturbance (marker at
+// lon -55, lat 28) -- demo-1 is already classified, and classified
+// systems' annotations are hidden (see visibleAnnotations()), same rule
+// as the editor. Kept spatially apart from the marker and from each
+// other -- both centered tight on the marker looked like a mess at
+// closer zoom (a real forecaster's own shape/arrow can of course still
+// end up that close; this is just demo content, not a rendering limit).
 const DEMO_ANNOTATIONS = [
   {
     id: 'demo-ann-1', systemId: 'demo-2', type: 'shape',
-    points: [{ lon: -58, lat: 25 }, { lon: -50, lat: 24 }, { lon: -52, lat: 31 }, { lon: -59, lat: 30 }],
+    points: [{ lon: -53, lat: 19 }, { lon: -44, lat: 18 }, { lon: -45, lat: 25 }, { lon: -54, lat: 24 }],
   },
   {
     id: 'demo-ann-2', systemId: 'demo-2', type: 'arrow',
-    points: [{ lon: -55, lat: 27.5 }, { lon: -48, lat: 33 }],
+    points: [{ lon: -55, lat: 28 }, { lon: -45, lat: 36 }],
   },
 ];
 
