@@ -20,6 +20,40 @@ import { createWindFieldRenderer } from '../editor/src/windFieldRenderer.js';
 
 const POLL_INTERVAL_MS = 60000;
 
+// Caps how far this read-only map can be zoomed out or panned -- keeps it
+// framed on the Atlantic and Eastern Pacific basins (this tool's actual
+// coverage area) instead of drifting out to show the whole globe. The
+// editor itself has no such limit (forecasters may need broader context).
+const PUBLIC_MAX_BOUNDS = { west: -145, east: 10, south: 0, north: 75 };
+
+function clampToBounds(bounds, box) {
+  let { west, east, south, north } = bounds;
+  let lonSpan = east - west;
+  let latSpan = north - south;
+  const boxLonSpan = box.east - box.west;
+  const boxLatSpan = box.north - box.south;
+
+  if (lonSpan > boxLonSpan) {
+    const cx = (west + east) / 2;
+    lonSpan = boxLonSpan;
+    west = cx - lonSpan / 2;
+    east = cx + lonSpan / 2;
+  }
+  if (latSpan > boxLatSpan) {
+    const cy = (south + north) / 2;
+    latSpan = boxLatSpan;
+    south = cy - latSpan / 2;
+    north = cy + latSpan / 2;
+  }
+
+  if (west < box.west) { east += box.west - west; west = box.west; }
+  if (east > box.east) { west -= east - box.east; east = box.east; }
+  if (south < box.south) { north += box.south - south; south = box.south; }
+  if (north > box.north) { south -= north - box.north; north = box.north; }
+
+  return { west, east, south, north };
+}
+
 // Shown when no backend is reachable at all (e.g. the GitHub Pages static
 // deployment, which has no /api) -- an honest, clearly-labeled stand-in
 // rather than a blank map or a crash, same spirit as the editor's own
@@ -156,7 +190,7 @@ function renderMap() {
 }
 
 function setView(next) {
-  viewState = next;
+  viewState = { ...next, bounds: clampToBounds(next.bounds, PUBLIC_MAX_BOUNDS) };
   renderMap();
 }
 

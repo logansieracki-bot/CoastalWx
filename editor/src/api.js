@@ -112,6 +112,7 @@ function forecastPointToApi(row) {
     lon: row.lon, lat: row.lat, hour: row.hour,
     windMph: row.windMph ?? null, spreadMi: row.spreadMi ?? 0,
     hourMode: row.hourMode ?? 'auto', hourOverride: row.hourOverride ?? null,
+    status: row.status ?? null,
     createdAt: row.createdAt, updatedAt: row.updatedAt,
   };
 }
@@ -156,6 +157,9 @@ function toApi(row) {
     hurricaneForceRadiusSwMi: row.hurricaneForceRadiusSwMi ?? null,
     hurricaneForceRadiusNwMi: row.hurricaneForceRadiusNwMi ?? null,
     galeRadiusMi: averageRadius(row.galeRadiusNeMi, row.galeRadiusSeMi, row.galeRadiusSwMi, row.galeRadiusNwMi),
+    discussion: row.discussion ?? null,
+    discussionByUserId: null,
+    discussionByDisplayName: null, // local-only mode has no real accounts to attribute to
     formed: !!row.formed,
     classified: !!row.classified,
     forecastInterval: row.forecastInterval ?? 12,
@@ -183,6 +187,7 @@ const local = {
       pressureMb: null, windMph: null, gustMph: null,
       galeRadiusNeMi: null, galeRadiusSeMi: null, galeRadiusSwMi: null, galeRadiusNwMi: null,
       hurricaneForceRadiusNeMi: null, hurricaneForceRadiusSeMi: null, hurricaneForceRadiusSwMi: null, hurricaneForceRadiusNwMi: null,
+      discussion: null,
       formed: false, classified: false, forecastInterval: 12,
       createdAt: now, updatedAt: now,
     };

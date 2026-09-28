@@ -14,6 +14,7 @@ import { milesBetween } from './trackGeometry.js';
 import { VALID_INTERVALS, nextForecastHour, recomputeForecastHours } from './forecastSchedule.js';
 import { projectLonLat } from './geo.js';
 import { api, detectBackend } from './api.js';
+import { buildDisturbanceCalloutText, buildClassifiedCalloutText } from './discussionText.js';
 
 const svg = document.getElementById('map');
 const systemsListEl = document.getElementById('systems-list');
@@ -25,6 +26,7 @@ const classifyToolButtons = document.querySelectorAll('[data-requires-classifica
 const deselectBtn = document.getElementById('deselect-btn');
 const resetViewBtn = document.getElementById('reset-view-btn');
 const placementHint = document.getElementById('placement-hint');
+const discussionCalloutEl = document.getElementById('discussion-callout');
 const loginGateEl = document.getElementById('login-gate');
 const editorShellEl = document.getElementById('editor-shell');
 const loginForm = document.getElementById('login-form');
@@ -133,6 +135,48 @@ function visibleAnnotations() {
   return annotations.filter((a) => !systems.find((s) => s.id === a.systemId)?.classified);
 }
 
+function latestAdvisoryFor(systemId) {
+  return advisories
+    .filter((a) => a.systemId === systemId)
+    .reduce((latest, a) => (!latest || a.number > latest.number ? a : latest), null);
+}
+
+// Text callout shown on the map next to the selected system, until it's
+// deselected -- a disturbance/invest discussion form pre-classification, or
+// the latest advisory's discussion + forecast-positions text once
+// classified. Positioned from the system's own projected marker position,
+// flipped/clamped to stay within the visible map area.
+function renderDiscussionCallout() {
+  const rect = svg.getBoundingClientRect();
+  const system = systems.find((s) => s.id === selectedId);
+  if (!system || rect.width === 0 || rect.height === 0) {
+    discussionCalloutEl.hidden = true;
+    return;
+  }
+
+  discussionCalloutEl.textContent = system.classified
+    ? buildClassifiedCalloutText(system, latestAdvisoryFor(system.id), api.isLocalOnly())
+    : buildDisturbanceCalloutText(system, api.isLocalOnly());
+  discussionCalloutEl.hidden = false;
+
+  const bounds = currentBounds();
+  const { x, y } = projectLonLat(system.lon, system.lat, bounds, rect.width, rect.height);
+  const margin = 12;
+  const gap = 16;
+  const calloutW = discussionCalloutEl.offsetWidth;
+  const calloutH = discussionCalloutEl.offsetHeight;
+
+  let left = x + gap;
+  if (left + calloutW + margin > rect.width) left = x - gap - calloutW;
+  left = Math.max(margin, Math.min(left, rect.width - calloutW - margin));
+
+  let top = y - calloutH / 2;
+  top = Math.max(margin, Math.min(top, rect.height - calloutH - margin));
+
+  discussionCalloutEl.style.left = `${left}px`;
+  discussionCalloutEl.style.top = `${top}px`;
+}
+
 function renderMap() {
   const rect = svg.getBoundingClientRect();
   // The map has zero size while it's behind the login gate (display:none
@@ -145,6 +189,7 @@ function renderMap() {
   windFieldRenderer.render({ system: systems.find((s) => s.id === selectedId) ?? null, activeThreshold: activeWindThreshold, bounds, width: rect.width, height: rect.height });
   annotationRenderer.render({ annotations: visibleAnnotations(), selectedAnnotationId, draft: drawingSession, systems, bounds, width: rect.width, height: rect.height });
   pointRenderer.render({ systems, selectedId, bounds, width: rect.width, height: rect.height });
+  renderDiscussionCallout();
   spreadEditor.render({ point: selectedForecastPoint(), bounds, width: rect.width, height: rect.height });
 }
 
@@ -557,6 +602,27 @@ function renderForecastTrackSection(system) {
     spreadInput.placeholder = 'mi';
     spreadInput.title = 'Cone spread (mi)';
 
+    // Manual land-status tag for this point, used only by the
+    // FORECAST POSITIONS AND MAX WINDS text in the discussion callout
+    // (see discussionText.js) -- e.g. "...OVER WATER" / "...INLAND", or
+    // "DISSIPATED" in place of a position once the system is expected to
+    // have dissipated by that forecast hour.
+    const statusSelect = document.createElement('select');
+    statusSelect.title = 'Land status for the forecast-positions text (optional)';
+    const statusOptions = [
+      { value: '', label: '—' },
+      { value: 'over_water', label: 'Over water' },
+      { value: 'inland', label: 'Inland' },
+      { value: 'dissipated', label: 'Dissipated' },
+    ];
+    for (const opt of statusOptions) {
+      const optionEl = document.createElement('option');
+      optionEl.value = opt.value;
+      optionEl.textContent = opt.label;
+      statusSelect.append(optionEl);
+    }
+    statusSelect.value = point.status ?? '';
+
     const saveBtn = document.createElement('button');
     saveBtn.textContent = 'Save';
     saveBtn.addEventListener('click', async () => {
@@ -567,6 +633,7 @@ function renderForecastTrackSection(system) {
         hourOverride: mode === 'override' ? Number(overrideStep) : null,
         windMph: windInput.value === '' ? null : Number(windInput.value),
         spreadMi: spreadInput.value === '' ? 0 : Number(spreadInput.value),
+        status: statusSelect.value === '' ? null : statusSelect.value,
       });
       forecastPoints = forecastPoints.map((p) => (p.id === updated.id ? updated : p));
       await syncForecastSchedule(system);
@@ -586,7 +653,7 @@ function renderForecastTrackSection(system) {
       renderMap();
     });
 
-    row.append(label, modeSelect, hourInput, windInput, spreadInput, saveBtn, deleteBtn);
+    row.append(label, modeSelect, hourInput, windInput, spreadInput, statusSelect, saveBtn, deleteBtn);
     wrap.append(row);
   }
 
@@ -612,6 +679,13 @@ function renderAdvisoriesSection(system) {
   // this is never bypassed for local-only mode.
   const localOnly = api.isLocalOnly();
   const canPublish = !localOnly && hasRole(currentUser, 'forecaster');
+
+  const discussionTextarea = document.createElement('textarea');
+  discussionTextarea.rows = 4;
+  discussionTextarea.placeholder = 'Discussion for this advisory (reasoning, trends, confidence)...';
+  discussionTextarea.disabled = !canPublish;
+  wrap.append(field('Discussion', discussionTextarea));
+
   const publishBtn = document.createElement('button');
   publishBtn.textContent = 'Publish Advisory';
   publishBtn.className = 'primary';
@@ -619,9 +693,10 @@ function renderAdvisoriesSection(system) {
   publishBtn.title = localOnly ? 'Advisories require the real hosted backend -- not available in local-only mode' : (canPublish ? '' : 'Requires Forecaster role or higher');
   publishBtn.addEventListener('click', async () => {
     if (!confirm(`Publish advisory #${own.length + 1} for ${displayLabel(system)}? This creates a permanent record of its current data and forecast track.`)) return;
-    const created = await api.createAdvisory(system.id, {});
+    const created = await api.createAdvisory(system.id, { discussion: discussionTextarea.value.trim() || null });
     advisories = [...advisories, created];
     renderSidebar();
+    renderMap(); // the on-map discussion callout reads `advisories` too
   });
   wrap.append(publishBtn);
 
@@ -650,6 +725,7 @@ function renderAdvisoriesSection(system) {
           await api.cancelAdvisory(advisory.id);
           advisories = advisories.filter((a) => a.id !== advisory.id);
           renderSidebar();
+          renderMap(); // the on-map discussion callout reads `advisories` too
         });
         row.append(cancelBtn);
       }
@@ -838,6 +914,18 @@ function renderSelectedPanel() {
   gustInput.value = system.gustMph ?? '';
   gustInput.placeholder = 'mph';
 
+  // Live, editable discussion for a disturbance/invest -- shown in the
+  // on-map callout while selected (see discussionCallout.js). Classified
+  // systems use a separate, per-advisory discussion instead (immutable
+  // once published), entered in renderAdvisoriesSection below.
+  let discussionTextarea = null;
+  if (!system.classified) {
+    discussionTextarea = document.createElement('textarea');
+    discussionTextarea.rows = 4;
+    discussionTextarea.placeholder = 'Forecast reasoning, trends, anything worth noting...';
+    discussionTextarea.value = system.discussion ?? '';
+  }
+
   const form = document.createElement('div');
   form.className = 'selected-form';
   form.append(
@@ -848,6 +936,7 @@ function renderSelectedPanel() {
     field('Sustained wind (mph)', windInput),
     field('Max gust (mph)', gustInput)
   );
+  if (discussionTextarea) form.append(field('Discussion', discussionTextarea));
   selectedPanelEl.append(form);
 
   selectedPanelEl.append(renderWindFieldToggle(system));
@@ -866,6 +955,7 @@ function renderSelectedPanel() {
       pressureMb: pressureInput.value === '' ? null : Number(pressureInput.value),
       windMph: windInput.value === '' ? null : Number(windInput.value),
       gustMph: gustInput.value === '' ? null : Number(gustInput.value),
+      ...(discussionTextarea ? { discussion: discussionTextarea.value.trim() || null } : {}),
     });
     systems = systems.map((s) => (s.id === updated.id ? updated : s));
     renderSidebar();

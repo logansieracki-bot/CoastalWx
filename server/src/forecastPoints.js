@@ -20,6 +20,7 @@ export function toApi(row) {
     spreadMi: row.spread_mi,
     hourMode: row.hour_mode,
     hourOverride: row.hour_override,
+    status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -64,11 +65,23 @@ const PATCHABLE_FIELDS = {
   spreadMi: 'spread_mi',
   hourMode: 'hour_mode',
   hourOverride: 'hour_override',
+  status: 'status',
 };
+
+// Not a DB CHECK constraint (see db.js's migration comment) -- validated
+// here instead, same spirit as hourMode's allow-list above in POST.
+const POINT_STATUSES = ['over_water', 'inland', 'dissipated'];
 
 forecastPointsRouter.patch('/forecast-points/:id', requireRole(...ROLES), (req, res) => {
   const existing = db.prepare('SELECT * FROM forecast_points WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'not_found' });
+
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'status')) {
+    const { status } = req.body;
+    if (status !== null && !POINT_STATUSES.includes(status)) {
+      return res.status(400).json({ error: `status must be null or one of: ${POINT_STATUSES.join(', ')}` });
+    }
+  }
 
   const updates = [];
   const values = [];

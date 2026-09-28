@@ -132,3 +132,28 @@ db.exec(`
 `);
 
 db.exec('CREATE INDEX IF NOT EXISTS idx_advisories_system_id ON advisories(system_id)');
+
+// --- Additive migrations -- columns added after each table's initial
+// CREATE TABLE above. CREATE TABLE IF NOT EXISTS is a no-op against an
+// existing database file, so anyone with data from before these columns
+// existed needs them added in place instead.
+function columnExists(table, column) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+}
+function addColumnIfMissing(table, column, definition) {
+  if (!columnExists(table, column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
+// Live, editable forecaster discussion for a disturbance/invest, shown in
+// an on-map callout while selected -- distinct from advisories.discussion
+// above, which is a per-advisory immutable snapshot for classified systems.
+addColumnIfMissing('systems', 'discussion', 'TEXT');
+addColumnIfMissing('systems', 'discussion_by_user_id', 'TEXT REFERENCES users(id)');
+
+// Manual per-point annotation for the FORECAST POSITIONS AND MAX WINDS text
+// product: null, 'over_water', 'inland', or 'dissipated' (validated in
+// forecastPoints.js, not via a CHECK constraint, to keep this ALTER TABLE
+// simple against existing databases).
+addColumnIfMissing('forecast_points', 'status', 'TEXT');

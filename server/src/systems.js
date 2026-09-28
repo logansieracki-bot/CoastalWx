@@ -31,6 +31,12 @@ function averageRadius(ne, se, sw, nw) {
   return quadrants.reduce((sum, v) => sum + (v ?? 0), 0) / 4;
 }
 
+function displayNameForUserId(userId) {
+  if (!userId) return null;
+  const row = db.prepare('SELECT display_name FROM users WHERE id = ?').get(userId);
+  return row ? row.display_name : null;
+}
+
 export function toApi(row) {
   return {
     id: row.id,
@@ -57,6 +63,9 @@ export function toApi(row) {
     hurricaneForceRadiusSwMi: row.hurricane_force_radius_sw_mi,
     hurricaneForceRadiusNwMi: row.hurricane_force_radius_nw_mi,
     galeRadiusMi: averageRadius(row.gale_radius_ne_mi, row.gale_radius_se_mi, row.gale_radius_sw_mi, row.gale_radius_nw_mi),
+    discussion: row.discussion,
+    discussionByUserId: row.discussion_by_user_id,
+    discussionByDisplayName: displayNameForUserId(row.discussion_by_user_id),
     formed: !!row.formed,
     classified: !!row.classified,
     forecastInterval: row.forecast_interval,
@@ -119,6 +128,7 @@ const PATCHABLE_FIELDS = {
   classified: 'classified',
   name: 'name',
   forecastInterval: 'forecast_interval',
+  discussion: 'discussion',
 };
 
 systemsRouter.patch('/systems/:id', requireRole(...ROLES), (req, res) => {
@@ -147,6 +157,14 @@ systemsRouter.patch('/systems/:id', requireRole(...ROLES), (req, res) => {
       values.push(value);
     }
   }
+  // The discussion's byline always comes from the authenticated session,
+  // never a client-supplied user id -- otherwise any writer could sign the
+  // discussion as someone else.
+  if (Object.prototype.hasOwnProperty.call(body, 'discussion')) {
+    updates.push('discussion_by_user_id = ?');
+    values.push(req.user.id);
+  }
+
   if (updates.length === 0) return res.status(400).json({ error: 'no updatable fields provided' });
 
   // A system gets the next unused storm name for its season automatically

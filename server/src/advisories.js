@@ -7,6 +7,12 @@ import { toApi as forecastPointToApi } from './forecastPoints.js';
 
 const CANCEL_WINDOW_MS = 60 * 60 * 1000; // 1 hour, matching the plan's emergency-cancel window
 
+function displayNameForUserId(userId) {
+  if (!userId) return null;
+  const row = db.prepare('SELECT display_name FROM users WHERE id = ?').get(userId);
+  return row ? row.display_name : null;
+}
+
 function toApi(row) {
   const issuedAtMs = new Date(row.issued_at).getTime();
   return {
@@ -18,6 +24,7 @@ function toApi(row) {
     snapshot: JSON.parse(row.snapshot_json),
     issuedAt: row.issued_at,
     issuedByUserId: row.issued_by_user_id,
+    issuedByDisplayName: displayNameForUserId(row.issued_by_user_id),
     cancelable: Date.now() < issuedAtMs + CANCEL_WINDOW_MS,
   };
 }
