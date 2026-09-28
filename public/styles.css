@@ -90,6 +90,16 @@ body {
 .system-list__empty { color: var(--text-muted); font-size: 13px; text-align: center; margin-top: 30px; }
 .system-list__empty[hidden] { display: none; }
 
+.sidebar-overview { display: flex; gap: 8px; }
+.sidebar-overview__tile {
+  flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.sidebar-overview__value { font-size: 22px; font-weight: 800; color: var(--accent); }
+.sidebar-overview__label {
+  font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em;
+}
+
 .system-card {
   background: var(--panel); border: 1px solid var(--border); border-radius: 13px; overflow: hidden;
   transition: background .12s ease, border-color .12s ease;
@@ -141,6 +151,24 @@ body {
   white-space: pre-wrap; word-break: break-word;
 }
 .discussion-callout[hidden] { display: none; }
+
+.map-legend {
+  position: absolute; left: 14px; bottom: 14px; z-index: 5;
+  display: flex; gap: 14px;
+  background: rgba(10, 22, 40, 0.82); border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px; padding: 10px 12px;
+}
+.map-legend__group { display: flex; flex-direction: column; gap: 6px; }
+.map-legend__title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--text-muted); white-space: nowrap;
+}
+.map-legend__swatches { display: flex; gap: 4px; }
+.map-legend__swatches span {
+  width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9.5px; font-weight: 800; color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
+}
 
 .land { fill: var(--land); stroke: var(--coast); stroke-width: 1.4px; vector-effect: non-scaling-stroke; }
 .lake { fill: var(--water); stroke: var(--coast); stroke-width: 0.9px; vector-effect: non-scaling-stroke; }
@@ -210,4 +238,6 @@ body {
   .system-list { width: auto; flex: 0 0 40%; border-right: none; border-bottom: 1px solid var(--border); }
   .map-pane { flex: 1; margin: 14px; }
   .hero { flex-wrap: wrap; }
+  .map-legend { gap: 10px; padding: 8px 10px; }
+  .map-legend__swatches span { width: 15px; height: 15px; font-size: 8.5px; }
 }

@@ -11,6 +11,7 @@
 import {
   INITIAL_BOUNDS, systemColor, displayLabel, intensityScore, intensityCategoryKey,
   categorySymbol, windOnlyIntensityScore, CATEGORY_INFO, maxFormationProbabilityPct,
+  PROBABILITY_COLORS,
 } from '../editor/src/constants.js';
 import { createViewState, getAspectFittedBounds } from '../editor/src/viewState.js';
 import { attachNavigation } from '../editor/src/navigation.js';
@@ -130,6 +131,28 @@ const activityTickerTextEl = document.getElementById('activity-ticker-text');
 const systemListEl = document.getElementById('system-list');
 const discussionCalloutEl = document.getElementById('discussion-callout');
 const systemListEmptyEl = document.getElementById('system-list-empty');
+const sidebarOverviewEl = document.getElementById('sidebar-overview');
+const mapLegendProbabilityEl = document.getElementById('map-legend-probability');
+const mapLegendCategoryEl = document.getElementById('map-legend-category');
+
+const CATEGORY_ORDER = ['ed', 'ets', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5'];
+const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+// Local, unitless count-up -- same easing/rAF shape as history.js's own
+// animateNumber, kept as its own small copy rather than a shared import
+// (same "duplicate the tiny helper per file" convention this app already
+// uses for screenUnit() across its renderers).
+function animateNumber(el, target, duration = 600) {
+  if (reduceMotion()) { el.textContent = String(target); return; }
+  const start = performance.now();
+  function tick(now) {
+    const t = Math.min(1, (now - start) / duration);
+    const eased = 1 - (1 - t) ** 3;
+    el.textContent = String(Math.round(target * eased));
+    if (t < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
 
 let systems = [];
 let forecastPoints = [];
@@ -424,6 +447,52 @@ function renderSystemList() {
   }
 }
 
+function overviewTile(label, value) {
+  const wrap = document.createElement('div');
+  wrap.className = 'sidebar-overview__tile';
+  const v = document.createElement('span');
+  v.className = 'sidebar-overview__value';
+  const l = document.createElement('span');
+  l.className = 'sidebar-overview__label';
+  l.textContent = label;
+  wrap.append(v, l);
+  animateNumber(v, value);
+  return wrap;
+}
+
+// A compact at-a-glance dashboard header for the sidebar, above the list
+// itself -- restates the same activity-ticker data as two numeric tiles
+// rather than only a prose sentence, so the sidebar reads as a dashboard
+// summary and not just a bare list.
+function renderSidebarOverview() {
+  const unclassified = systems.filter((s) => !s.classified).length;
+  sidebarOverviewEl.replaceChildren(
+    overviewTile('Tracked', systems.length),
+    overviewTile('Areas of interest', unclassified),
+  );
+}
+
+// Static -- the marker color scale itself never changes -- so this is
+// built once at init() rather than on every refresh(), reading the exact
+// same palettes/abbreviations the markers themselves use (PROBABILITY_
+// COLORS, CATEGORY_INFO, categorySymbol) so it can never drift out of
+// sync with what's actually drawn on the map.
+function renderMapLegend() {
+  for (const key of ['none', 'low', 'medium', 'high']) {
+    const swatch = document.createElement('span');
+    swatch.style.background = PROBABILITY_COLORS[key];
+    swatch.title = { none: 'None expected', low: 'Low chance', medium: 'Medium chance', high: 'High chance' }[key];
+    mapLegendProbabilityEl.append(swatch);
+  }
+  for (const key of CATEGORY_ORDER) {
+    const swatch = document.createElement('span');
+    swatch.style.background = CATEGORY_INFO[key].color;
+    swatch.title = CATEGORY_INFO[key].label;
+    swatch.textContent = categorySymbol(key) ?? '';
+    mapLegendCategoryEl.append(swatch);
+  }
+}
+
 function renderHeroStatus() {
   const count = systems.length;
   heroStatusEl.textContent = count === 0
@@ -486,6 +555,7 @@ async function refresh() {
   await loadData();
   renderHeroStatus();
   renderActivityTicker();
+  renderSidebarOverview();
   renderSystemList();
   renderMap();
 }
@@ -509,6 +579,7 @@ async function init() {
   });
 
   window.addEventListener('resize', renderMap);
+  renderMapLegend();
 
   await refresh();
   setInterval(() => { refresh().catch((err) => console.error(err)); }, POLL_INTERVAL_MS);

@@ -263,6 +263,16 @@ If no backend is reachable at all (the GitHub Pages deployment), the page
 falls back to a couple of clearly-labeled sample systems with a "DEMO
 MODE" banner, rather than an empty map or a broken page.
 
+A **sidebar overview** above the system list restates that same activity
+as two numeric tiles (systems tracked, areas of interest) that count up
+on load, and a **map legend** in the corner of the map pane explains what
+marker colors mean (formation-chance tier pre-classification, category
+once classified) — the live map previously had no key for its own colors
+at all. Every active system's marker also carries a soft pulsing "this is
+live" ring (skipped under `prefers-reduced-motion`), kept in its own
+public-only renderer rather than the shared point renderer so the
+forecaster tool's working map stays untouched.
+
 An **activity ticker** below the header auto-generates an NHC-style
 one-line summary of current activity ("CoastalWx issuing advisories on
 **Marlowe**") straight from the same systems data as the rest of the

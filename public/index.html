@@ -36,12 +36,23 @@
 
   <div class="content">
     <aside class="system-list" id="system-list" aria-label="Active systems">
+      <div class="sidebar-overview" id="sidebar-overview"></div>
       <p id="system-list-empty" class="system-list__empty">No active disturbances or systems right now.</p>
     </aside>
 
     <main class="map-pane">
       <svg id="map"></svg>
       <div id="discussion-callout" class="discussion-callout" hidden></div>
+      <div class="map-legend" id="map-legend" aria-label="Marker color scale">
+        <div class="map-legend__group">
+          <span class="map-legend__title">Formation chance</span>
+          <div class="map-legend__swatches" id="map-legend-probability"></div>
+        </div>
+        <div class="map-legend__group">
+          <span class="map-legend__title">Category</span>
+          <div class="map-legend__swatches" id="map-legend-category"></div>
+        </div>
+      </div>
     </main>
   </div>
 </div>
