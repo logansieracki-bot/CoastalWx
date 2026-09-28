@@ -14,11 +14,13 @@ import {
 } from '../editor/src/constants.js';
 import { createViewState, getAspectFittedBounds } from '../editor/src/viewState.js';
 import { attachNavigation } from '../editor/src/navigation.js';
+import { projectLonLat } from '../editor/src/geo.js';
 import { createMapRenderer } from '../editor/src/mapRenderer.js';
 import { createPointRenderer } from '../editor/src/pointRenderer.js';
 import { createAnnotationRenderer } from '../editor/src/annotationRenderer.js';
 import { createTrackConeRenderer } from '../editor/src/trackConeRenderer.js';
 import { createWindFieldRenderer } from '../editor/src/windFieldRenderer.js';
+import { buildDisturbanceCalloutText, buildClassifiedCalloutText } from '../editor/src/discussionText.js';
 
 const POLL_INTERVAL_MS = 60000;
 
@@ -81,18 +83,22 @@ const DEMO_SYSTEMS = [
     galeRadiusNeMi: null, galeRadiusSeMi: null, galeRadiusSwMi: null, galeRadiusNwMi: null,
     hurricaneForceRadiusNeMi: null, hurricaneForceRadiusSeMi: null, hurricaneForceRadiusSwMi: null, hurricaneForceRadiusNwMi: null,
     galeRadiusMi: null,
+    discussion: 'Broad, disorganized area of low pressure. Some slow development is possible while it drifts north-northeast over the next several days.',
+    discussionByDisplayName: 'Demo Forecaster',
     formed: false, classified: false, forecastInterval: 12,
   },
 ];
 const DEMO_FORECAST_POINTS = [
-  { id: 'demo-fp-1', systemId: 'demo-1', sequence: 1, lon: -66.5, lat: 40, hour: 12, windMph: 70, spreadMi: 40, hourMode: 'auto', hourOverride: null },
-  { id: 'demo-fp-2', systemId: 'demo-1', sequence: 2, lon: -64.5, lat: 42, hour: 24, windMph: 60, spreadMi: 70, hourMode: 'auto', hourOverride: null },
-  { id: 'demo-fp-3', systemId: 'demo-1', sequence: 3, lon: -61, lat: 44.5, hour: 36, windMph: 50, spreadMi: 100, hourMode: 'auto', hourOverride: null },
+  { id: 'demo-fp-1', systemId: 'demo-1', sequence: 1, lon: -66.5, lat: 40, hour: 12, windMph: 70, spreadMi: 40, hourMode: 'auto', hourOverride: null, status: null },
+  { id: 'demo-fp-2', systemId: 'demo-1', sequence: 2, lon: -64.5, lat: 42, hour: 24, windMph: 60, spreadMi: 70, hourMode: 'auto', hourOverride: null, status: null },
+  { id: 'demo-fp-3', systemId: 'demo-1', sequence: 3, lon: -61, lat: 44.5, hour: 36, windMph: 50, spreadMi: 100, hourMode: 'auto', hourOverride: null, status: 'over_water' },
 ];
 const DEMO_ADVISORIES = [
   {
-    id: 'demo-adv-1', systemId: 'demo-1', number: 3, headline: null, discussion: null,
-    issuedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), issuedByUserId: 'demo', cancelable: false,
+    id: 'demo-adv-1', systemId: 'demo-1', number: 3, headline: null,
+    discussion: 'Marlowe continues to weaken as it accelerates northeast over open water. No coastal impacts are expected with this system.',
+    issuedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), issuedByUserId: 'demo', issuedByDisplayName: 'Demo Forecaster', cancelable: false,
+    snapshot: { system: DEMO_SYSTEMS[0], forecastPoints: DEMO_FORECAST_POINTS },
   },
 ];
 // A shape + an arrow on the non-classified demo disturbance (marker at
@@ -117,6 +123,7 @@ const svg = document.getElementById('map');
 const demoBannerEl = document.getElementById('demo-banner');
 const heroStatusEl = document.getElementById('hero-status');
 const systemListEl = document.getElementById('system-list');
+const discussionCalloutEl = document.getElementById('discussion-callout');
 const systemListEmptyEl = document.getElementById('system-list-empty');
 
 let systems = [];
@@ -211,6 +218,39 @@ function visibleAnnotations() {
   return annotations.filter((a) => !systems.find((s) => s.id === a.systemId)?.classified);
 }
 
+// Same on-map callout as the editor (see editor/src/main.js's
+// renderDiscussionCallout + editor/src/discussionText.js), reusing the
+// exact same text builders -- shown here too since a forecaster's
+// discussion (and, once classified, the advisory text) is public
+// information, same as everything else already on this page.
+function renderDiscussionCallout(selected, bounds, rect) {
+  if (!selected) {
+    discussionCalloutEl.hidden = true;
+    return;
+  }
+
+  discussionCalloutEl.textContent = selected.classified
+    ? buildClassifiedCalloutText(selected, latestAdvisoryFor(selected.id), usingDemoData)
+    : buildDisturbanceCalloutText(selected, usingDemoData);
+  discussionCalloutEl.hidden = false;
+
+  const { x, y } = projectLonLat(selected.lon, selected.lat, bounds, rect.width, rect.height);
+  const margin = 12;
+  const gap = 40;
+  const calloutW = discussionCalloutEl.offsetWidth;
+  const calloutH = discussionCalloutEl.offsetHeight;
+
+  let left = x + gap;
+  if (left + calloutW + margin > rect.width) left = x - gap - calloutW;
+  left = Math.max(margin, Math.min(left, rect.width - calloutW - margin));
+
+  let top = y - calloutH / 2 - 10;
+  top = Math.max(margin, Math.min(top, rect.height - calloutH - margin));
+
+  discussionCalloutEl.style.left = `${left}px`;
+  discussionCalloutEl.style.top = `${top}px`;
+}
+
 function renderMap() {
   const rect = svg.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return;
@@ -219,6 +259,7 @@ function renderMap() {
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
   trackConeRenderer.render({ points: trackPointsFor(selected), selectedForecastPointId: null, bounds, width: rect.width, height: rect.height });
   windFieldRenderer.render({ system: selected, activeThreshold: null, bounds, width: rect.width, height: rect.height });
+  renderDiscussionCallout(selected, bounds, rect);
   annotationRenderer.render({ annotations: visibleAnnotations(), selectedAnnotationId: null, draft: null, systems, bounds, width: rect.width, height: rect.height });
   pointRenderer.render({ systems, selectedId, bounds, width: rect.width, height: rect.height });
 }
