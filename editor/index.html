@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tempest Coast — Forecaster Tools</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Ccircle%20cx='16'%20cy='16'%20r='15'%20fill='%230b1f3a'/%3E%3Ctext%20x='16'%20y='22'%20font-size='17'%20font-family='system-ui,sans-serif'%20font-weight='700'%20fill='%23ffffff'%20text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
+<title>CoastalWx — Forecaster Tools</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2024%2024'%3E%3Crect%20width%3D'24'%20height%3D'24'%20rx%3D'6'%20fill%3D'%230a1628'%2F%3E%3Cpath%20d%3D'M12%2C2.5%20L13.56%2C2.77%20L15.03%2C3.29%20L16.38%2C4.04%20L17.56%2C4.99%20L18.55%2C6.11%20L19.32%2C7.35%20L19.87%2C8.69%20L20.17%2C10.08%20L20.24%2C11.48%20L20.07%2C12.85%20L19.68%2C14.15%20L19.09%2C15.34%20L18.32%2C16.40%20L17.40%2C17.29%20L16.36%2C18.01%20L15.24%2C18.53%20L14.07%2C18.84%20L12.88%2C18.95%20L11.71%2C18.87%20L10.60%2C18.59%20L9.57%2C18.13%20L8.66%2C17.52%20L7.87%2C16.78%20L7.24%2C15.94%20L6.77%2C15.02%20L6.47%2C14.06%20L6.34%2C13.08%20L6.37%2C12.12%20L6.57%2C11.20%20L6.91%2C10.35%20L7.38%2C9.59%20L7.96%2C8.93%20L8.62%2C8.40%20L9.35%2C8.00%20L10.11%2C7.74%20L10.88%2C7.62%20L11.63%2C7.63%20L12.36%2C7.77%20L13.02%2C8.02%20L13.61%2C8.38%20L14.12%2C8.81%20L14.53%2C9.31%20L14.83%2C9.85%20L15.02%2C10.42%20L15.11%2C10.99%20L15.10%2C11.54%20L15.00%2C12.06%20L14.81%2C12.54%20L14.55%2C12.95%20L14.24%2C13.29%20L13.88%2C13.56%20L13.51%2C13.75%20L13.12%2C13.85%20L12.75%2C13.89%20L12.39%2C13.85%20L12.07%2C13.75%20L11.80%2C13.60%20L11.57%2C13.41%20L11.40%2C13.20%20L11.29%2C12.97'%20stroke%3D'%235eead4'%20stroke-width%3D'2'%20fill%3D'none'%20stroke-linecap%3D'round'%20stroke-linejoin%3D'round'%2F%3E%3C%2Fsvg%3E">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -14,8 +14,10 @@
   </div>
   <div id="login-gate" class="login-gate" hidden>
     <form id="login-form" class="login-card">
-      <span class="login-card__mark">L</span>
-      <h1>Tempest Coast</h1>
+      <span class="login-card__mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="24" height="24"><path d="M12,2.5 L13.56,2.77 L15.03,3.29 L16.38,4.04 L17.56,4.99 L18.55,6.11 L19.32,7.35 L19.87,8.69 L20.17,10.08 L20.24,11.48 L20.07,12.85 L19.68,14.15 L19.09,15.34 L18.32,16.40 L17.40,17.29 L16.36,18.01 L15.24,18.53 L14.07,18.84 L12.88,18.95 L11.71,18.87 L10.60,18.59 L9.57,18.13 L8.66,17.52 L7.87,16.78 L7.24,15.94 L6.77,15.02 L6.47,14.06 L6.34,13.08 L6.37,12.12 L6.57,11.20 L6.91,10.35 L7.38,9.59 L7.96,8.93 L8.62,8.40 L9.35,8.00 L10.11,7.74 L10.88,7.62 L11.63,7.63 L12.36,7.77 L13.02,8.02 L13.61,8.38 L14.12,8.81 L14.53,9.31 L14.83,9.85 L15.02,10.42 L15.11,10.99 L15.10,11.54 L15.00,12.06 L14.81,12.54 L14.55,12.95 L14.24,13.29 L13.88,13.56 L13.51,13.75 L13.12,13.85 L12.75,13.89 L12.39,13.85 L12.07,13.75 L11.80,13.60 L11.57,13.41 L11.40,13.20 L11.29,12.97" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <h1>CoastalWx</h1>
       <p class="login-card__subtitle">Forecaster sign-in</p>
       <input type="text" id="login-username" placeholder="Username" autocomplete="username" required>
       <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required>
@@ -32,7 +34,8 @@
   <div id="editor-shell" class="editor-shell" hidden>
     <header class="toolbar">
       <div class="toolbar__title">
-        <strong>Tempest Coast</strong>
+        <svg class="toolbar__mark" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12,2.5 L13.56,2.77 L15.03,3.29 L16.38,4.04 L17.56,4.99 L18.55,6.11 L19.32,7.35 L19.87,8.69 L20.17,10.08 L20.24,11.48 L20.07,12.85 L19.68,14.15 L19.09,15.34 L18.32,16.40 L17.40,17.29 L16.36,18.01 L15.24,18.53 L14.07,18.84 L12.88,18.95 L11.71,18.87 L10.60,18.59 L9.57,18.13 L8.66,17.52 L7.87,16.78 L7.24,15.94 L6.77,15.02 L6.47,14.06 L6.34,13.08 L6.37,12.12 L6.57,11.20 L6.91,10.35 L7.38,9.59 L7.96,8.93 L8.62,8.40 L9.35,8.00 L10.11,7.74 L10.88,7.62 L11.63,7.63 L12.36,7.77 L13.02,8.02 L13.61,8.38 L14.12,8.81 L14.53,9.31 L14.83,9.85 L15.02,10.42 L15.11,10.99 L15.10,11.54 L15.00,12.06 L14.81,12.54 L14.55,12.95 L14.24,13.29 L13.88,13.56 L13.51,13.75 L13.12,13.85 L12.75,13.89 L12.39,13.85 L12.07,13.75 L11.80,13.60 L11.57,13.41 L11.40,13.20 L11.29,12.97" stroke="#2469d8" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <strong>CoastalWx</strong>
         <span>Forecaster editor</span>
       </div>
       <div class="tool-group">

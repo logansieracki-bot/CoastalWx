@@ -1,9 +1,9 @@
-# Tempest Coast (repo: NorEASterCaster)
+# CoastalWx (repo: NorEASterCaster)
 
-**Tempest Coast** is the live product name for this Nor'easter/coastal-low
+**CoastalWx** is the live product name for this Nor'easter/coastal-low
 forecasting tool -- the repository itself keeps its original name,
 NorEASterCaster, but everything user-facing (the public site, the
-forecaster editor) is branded Tempest Coast.
+forecaster editor) is branded CoastalWx.
 
 This repo started as an easy-to-open, single-file forecast page for
 Nor'easters and coastal lows, styled after the National Hurricane Center's

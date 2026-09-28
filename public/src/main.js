@@ -1,19 +1,22 @@
 // Read-only public viewer: reuses the editor's own rendering modules
 // as-is (same basemap, marker, cone, and wind-field visuals) with none of
 // its editing machinery -- no toolbar, no drag gestures, no annotations.
-// Served from the same origin/process as the editor (mounted at /editor)
-// and the /api backend, so these absolute-path imports/fetches always
-// resolve correctly regardless of this module's own served path.
+// These imports are relative (not absolute /editor/... paths) so they
+// keep resolving correctly under a path-prefixed deployment too -- e.g.
+// GitHub Pages serves this repo at /NorEASterCaster/, not the domain
+// root, so an absolute /editor/src/... path would 404 there even though
+// the file exists (Railway, served from its own root with no prefix,
+// happened to make that mistake invisible).
 import {
   INITIAL_BOUNDS, systemColor, displayLabel, intensityScore, intensityCategoryKey,
   categorySymbol, windOnlyIntensityScore, CATEGORY_INFO, maxFormationProbabilityPct,
-} from '/editor/src/constants.js';
-import { createViewState, getAspectFittedBounds } from '/editor/src/viewState.js';
-import { attachNavigation } from '/editor/src/navigation.js';
-import { createMapRenderer } from '/editor/src/mapRenderer.js';
-import { createPointRenderer } from '/editor/src/pointRenderer.js';
-import { createTrackConeRenderer } from '/editor/src/trackConeRenderer.js';
-import { createWindFieldRenderer } from '/editor/src/windFieldRenderer.js';
+} from '../editor/src/constants.js';
+import { createViewState, getAspectFittedBounds } from '../editor/src/viewState.js';
+import { attachNavigation } from '../editor/src/navigation.js';
+import { createMapRenderer } from '../editor/src/mapRenderer.js';
+import { createPointRenderer } from '../editor/src/pointRenderer.js';
+import { createTrackConeRenderer } from '../editor/src/trackConeRenderer.js';
+import { createWindFieldRenderer } from '../editor/src/windFieldRenderer.js';
 
 const POLL_INTERVAL_MS = 60000;
 
@@ -75,9 +78,13 @@ let trackConeRenderer = null;
 let windFieldRenderer = null;
 
 async function loadGeography() {
+  // Relative to the document (not this module) -- fetch() resolves against
+  // the page's own URL, and editor/ sits alongside wherever this page's
+  // index.html is rooted in both deployments (see the import comment above
+  // for why this can't be an absolute /editor/... path).
   const [land, lakes, borders, states] = await Promise.all(
     ['land', 'lakes', 'borders', 'states'].map((name) =>
-      fetch(`/editor/assets/${name}.geojson`).then((r) => r.json())
+      fetch(`editor/assets/${name}.geojson`).then((r) => r.json())
     )
   );
   return { land, lakes, borders, states };
@@ -92,7 +99,7 @@ async function fetchJson(path) {
 async function loadData() {
   try {
     const [nextSystems, nextForecastPoints, nextAdvisories] = await Promise.all([
-      fetchJson('/api/systems'), fetchJson('/api/forecast-points'), fetchJson('/api/advisories'),
+      fetchJson('api/systems'), fetchJson('api/forecast-points'), fetchJson('api/advisories'),
     ]);
     systems = nextSystems;
     forecastPoints = nextForecastPoints;
@@ -310,5 +317,5 @@ async function init() {
 
 init().catch((err) => {
   console.error(err);
-  document.body.insertAdjacentHTML('beforeend', `<div class="fatal-error">Failed to load Tempest Coast: ${err.message}</div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div class="fatal-error">Failed to load CoastalWx: ${err.message}</div>`);
 });
