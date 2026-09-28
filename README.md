@@ -1,9 +1,12 @@
-# CoastalWx (repo: NorEASterCaster)
+# CoastalWx
 
-**CoastalWx** is the live product name for this Nor'easter/coastal-low
-forecasting tool -- the repository itself keeps its original name,
-NorEASterCaster, but everything user-facing (the public site, the
-forecaster editor) is branded CoastalWx.
+**CoastalWx** is the name for this Nor'easter/coastal-low forecasting
+tool -- both the product (public site, forecaster editor) and this
+repository itself (formerly NorEASterCaster). Renaming the GitHub repo
+also moves its GitHub Pages URL to
+`https://<owner>.github.io/CoastalWx/` (a project Pages site's URL is
+always derived from the repo name) -- update any bookmarks/links
+pointing at the old `.../NorEASterCaster/` URL.
 
 This repo started as an easy-to-open, single-file forecast page for
 Nor'easters and coastal lows, styled after the National Hurricane Center's
