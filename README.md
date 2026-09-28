@@ -263,6 +263,25 @@ If no backend is reachable at all (the GitHub Pages deployment), the page
 falls back to a couple of clearly-labeled sample systems with a "DEMO
 MODE" banner, rather than an empty map or a broken page.
 
+An **activity ticker** below the header auto-generates an NHC-style
+one-line summary of current activity ("CoastalWx issuing advisories on
+**Marlowe**") straight from the same systems data as the rest of the
+page — never placeholder text.
+
+### Storm History (`/public/history.html`)
+
+A second page, linked from the header, that builds a track/intensity
+history automatically from every system's published advisories — no
+separate data entry. Since an advisory is already an immutable snapshot
+of a system's position and intensity at the moment it was issued, its
+history is just every advisory it's ever had, in order: a colored dot per
+advisory (colored by *that advisory's own* category, so the track's color
+literally traces the strengthening/weakening story) connected by a line,
+on the same basemap the live map uses, plus a stats strip (current/peak
+wind, central pressure, advisory count, latest advisory time). Only
+systems with at least one advisory appear here — i.e., every system that
+was ever classified, whether still active or long since dissipated.
+
 To run it:
 
 ```

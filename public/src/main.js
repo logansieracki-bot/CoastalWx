@@ -124,6 +124,8 @@ const DEMO_ANNOTATIONS = [
 const svg = document.getElementById('map');
 const demoBannerEl = document.getElementById('demo-banner');
 const heroStatusEl = document.getElementById('hero-status');
+const activityTickerEl = document.getElementById('activity-ticker');
+const activityTickerTextEl = document.getElementById('activity-ticker-text');
 const systemListEl = document.getElementById('system-list');
 const discussionCalloutEl = document.getElementById('discussion-callout');
 const systemListEmptyEl = document.getElementById('system-list-empty');
@@ -426,6 +428,43 @@ function renderHeroStatus() {
     : `${count} system${count === 1 ? '' : 's'} being tracked`;
 }
 
+// "A, B, and C" -- Oxford comma, correct for 1/2/3+ items.
+function joinWithAnd(items) {
+  if (items.length <= 1) return items.join('');
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+// Real, auto-generated summary of current activity -- built from the same
+// systems data as the rest of the page, not placeholder text. Named
+// (classified) systems get an NHC-style "issuing advisories on" mention;
+// everything else pre-classification is summarized as a plain count.
+// Built with DOM nodes (not innerHTML) so storm names -- while forecaster-
+// entered, not public input -- are never interpreted as markup.
+function renderActivityTicker() {
+  const named = systems.filter((s) => s.classified && s.name);
+  const unnamed = systems.filter((s) => !s.classified);
+
+  if (systems.length === 0) {
+    activityTickerEl.hidden = true;
+    return;
+  }
+  activityTickerEl.hidden = false;
+
+  activityTickerTextEl.replaceChildren();
+  if (named.length) {
+    activityTickerTextEl.append('CoastalWx issuing advisories on ');
+    const strong = document.createElement('strong');
+    strong.textContent = joinWithAnd(named.map((s) => s.displayName));
+    activityTickerTextEl.append(strong);
+  }
+  if (unnamed.length) {
+    if (named.length) activityTickerTextEl.append(' — ');
+    activityTickerTextEl.append(`monitoring ${unnamed.length} additional area${unnamed.length === 1 ? '' : 's'} of interest`);
+  }
+  activityTickerTextEl.append('.');
+}
+
 function select(systemId, { scroll = false } = {}) {
   selectedId = systemId;
   renderSystemList();
@@ -443,6 +482,7 @@ svg.addEventListener('click', (event) => {
 async function refresh() {
   await loadData();
   renderHeroStatus();
+  renderActivityTicker();
   renderSystemList();
   renderMap();
 }
