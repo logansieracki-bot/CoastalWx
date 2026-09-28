@@ -10,13 +10,13 @@
   --accent-strong: #2dd4bf;
   --danger: #f28b82;
 
-  --water: #0d1d33;
+  --water: #a9cddd;
   --land: #d9caa0;
   --coast: #362c16;
   --border-line: #6b5a38;
   --state-line: #5b4c2e;
-  --grid-line: rgba(255, 255, 255, 0.08);
-  --grid-label: rgba(255, 255, 255, 0.4);
+  --grid-line: rgba(74, 58, 34, 0.42);
+  --grid-label: rgba(20, 35, 55, 0.55);
 }
 
 * { box-sizing: border-box; }
@@ -124,8 +124,8 @@ body {
 .point-x-outline { stroke: rgba(10, 22, 40, .9); stroke-width: 7px; stroke-linecap: round; vector-effect: non-scaling-stroke; cursor: pointer; }
 .point-x-fill { stroke-width: 4px; stroke-linecap: round; vector-effect: non-scaling-stroke; cursor: pointer; }
 .point-label {
-  fill: #f4f8fc; font-weight: 700; text-anchor: middle; paint-order: stroke fill;
-  stroke: rgba(6, 14, 26, .9); stroke-width: 3px; vector-effect: non-scaling-stroke;
+  fill: #0b1f3a; font-weight: 700; text-anchor: middle; paint-order: stroke fill;
+  stroke: #fff; stroke-width: 3px; vector-effect: non-scaling-stroke;
 }
 .point-selection-ring { fill: none; stroke: var(--accent); stroke-width: 1.8px; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
 
@@ -135,26 +135,19 @@ body {
 .forecast-cone-outline { stroke: none; }
 .forecast-cone-outline-full { fill: rgba(238, 243, 249, .95); }
 .forecast-cone-outline-early { fill: rgba(6, 14, 26, .92); }
-.forecast-track { fill: none; stroke: #eef3f9; stroke-width: 2.1px; vector-effect: non-scaling-stroke; }
+.forecast-track { fill: none; stroke: #111820; stroke-width: 2.1px; vector-effect: non-scaling-stroke; }
 .forecast-point-marker { pointer-events: none; }
 .forecast-point-core { fill: #050505; stroke: #050505; stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
 .forecast-point-symbol { fill: #fff; font-weight: 800; font-family: inherit; }
 .forecast-point-marker-label {
-  fill: #eef3f9; font-weight: 800; font-family: inherit;
-  paint-order: stroke; stroke: rgba(6, 14, 26, .88); stroke-width: 2px;
+  fill: #111; font-weight: 800; font-family: inherit;
+  paint-order: stroke; stroke: rgba(255, 255, 255, .88); stroke-width: 2px;
   vector-effect: non-scaling-stroke;
 }
 
 .wind-field { vector-effect: non-scaling-stroke; pointer-events: none; stroke-width: 1.35px; }
 .wind-field-gale { fill: rgba(240, 188, 74, .4); stroke: #f0bc4a; }
 .wind-field-hfw { fill: rgba(224, 100, 100, .4); stroke: #e06464; }
-
-.map-hint {
-  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
-  margin: 0; padding: 7px 16px; border-radius: 999px;
-  background: rgba(10, 22, 40, 0.82); border: 1px solid var(--border); color: var(--text-muted); font-size: 12px; font-weight: 500;
-  pointer-events: none; white-space: nowrap;
-}
 
 .fatal-error {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
