@@ -278,9 +278,23 @@ history is just every advisory it's ever had, in order: a colored dot per
 advisory (colored by *that advisory's own* category, so the track's color
 literally traces the strengthening/weakening story) connected by a line,
 on the same basemap the live map uses, plus a stats strip (current/peak
-wind, central pressure, advisory count, latest advisory time). Only
-systems with at least one advisory appear here — i.e., every system that
-was ever classified, whether still active or long since dissipated.
+wind, central pressure, advisory count, latest advisory time). Systems
+with at least one advisory appear here — i.e., every system that was ever
+classified, whether still active or long since dissipated — and so does
+any currently-active **Invest**, even though it has no advisories yet
+(advisories require classification): it plots as a single current-position
+point with development-watch stats (stage, 2/5/10-day formation chance)
+in place of the wind/pressure/advisory stats a classified system shows,
+so this page doubles as the ongoing-systems view, not just an archive.
+
+A **Track History / Wind History** tab above the chart switches between
+the colored-dot track (above) and a **wind swath**: every advisory's own
+gale- and hurricane-force wind envelope (the same quadrant geometry the
+live map's wind-field editor draws, just stacked once per advisory
+instead of once for the current position) at low opacity, so the swath
+reads solid where many advisories' envelopes overlap — the core of the
+track — and fades out toward the edges of how wide the system's winds
+ever reached.
 
 To run it:
 

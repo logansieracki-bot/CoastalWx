@@ -33,6 +33,36 @@
 .history-chart-wrap { flex: 1; position: relative; min-height: 300px; background: var(--water); }
 #history-chart { width: 100%; height: 100%; display: block; }
 
+.history-chart-tabs {
+  position: absolute; top: 12px; right: 12px; z-index: 5;
+  display: flex; gap: 3px; background: rgba(10, 22, 40, 0.82);
+  border: 1px solid var(--border); border-radius: 10px; padding: 4px;
+}
+.history-chart-tab {
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--text-muted);
+  background: none; border: none; border-radius: 7px; padding: 6px 12px;
+  cursor: pointer; transition: background .15s, color .15s;
+}
+.history-chart-tab:hover { background: var(--panel-hover); color: var(--text); }
+.history-chart-tab.is-active { background: var(--accent); color: var(--bg-deep); }
+
+/* Each envelope is low-opacity and stacks once per advisory -- many
+   overlapping at the track's core read as solid, a few at the fringes
+   read as faint, the same "how wide did it get, and where" swath the
+   reference design uses, built from overlap instead of a merged shape. */
+.wind-history-envelope { pointer-events: none; }
+.wind-history-envelope-gale { fill: rgba(240, 188, 74, 0.1); }
+.wind-history-envelope-hfw { fill: rgba(224, 100, 100, 0.16); }
+
+/* Track History and Wind History are mutually-exclusive full-chart views,
+   toggled by the tabs above; both layers are always kept rendered
+   current, only visibility switches, via .is-wind-view on the svg. */
+#history-chart:not(.is-wind-view) #wind-history-layer { display: none; }
+#history-chart.is-wind-view #track-history-layer { display: none; }
+/* The category legend only labels Track History's colored dots -- hide it
+   in Wind History, where nothing on screen refers to it. */
+#history-chart.is-wind-view ~ .history-legend { display: none; }
+
 .history-legend {
   position: absolute; left: 12px; bottom: 12px; z-index: 5;
   background: rgba(255, 255, 255, 0.94); border: 1px solid #cbd5e1; border-radius: 10px;
