@@ -163,6 +163,15 @@ body {
 .annotation-arrow-hit { display: none; }
 .annotation-arrowhead { stroke: none; }
 
+.live-pulse {
+  pointer-events: none; transform-box: fill-box; transform-origin: center;
+  animation: live-pulse 2.6s ease-out infinite;
+}
+@keyframes live-pulse {
+  0% { transform: scale(1); opacity: .5; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
 .point-x-outline { stroke: rgba(10, 22, 40, .9); stroke-width: 7px; stroke-linecap: round; vector-effect: non-scaling-stroke; cursor: pointer; }
 .point-x-fill { stroke-width: 4px; stroke-linecap: round; vector-effect: non-scaling-stroke; cursor: pointer; }
 .point-label {

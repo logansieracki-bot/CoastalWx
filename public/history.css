@@ -79,8 +79,23 @@
 }
 
 .track-history-line { fill: none; stroke: #111820; stroke-width: 1.6px; vector-effect: non-scaling-stroke; }
-.track-history-dot { stroke: #fff; stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.track-history-dot {
+  stroke: #fff; stroke-width: 1.5px; vector-effect: non-scaling-stroke;
+  transform-box: fill-box; transform-origin: center;
+}
 .track-history-dot--current { stroke-width: 2.5px; }
+
+@keyframes history-dot-pop {
+  from { transform: scale(0); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes history-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .track-history-dot, .wind-history-envelope { animation: none !important; }
+}
 
 .history-list-badge {
   font-size: 10.5px; color: var(--text-muted); white-space: nowrap;

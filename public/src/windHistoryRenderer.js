@@ -20,6 +20,19 @@ function el(name, attrs = {}) {
   return node;
 }
 
+const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+function appendEnvelope(layer, snap, radii, cssClass, delayMs) {
+  const d = windEnvelopePathData({ lon: snap.lon, lat: snap.lat }, radii);
+  if (!d) return;
+  const path = el('path', { class: `wind-history-envelope ${cssClass}`, d });
+  if (!reduceMotion()) {
+    path.style.animation = 'history-fade-in .6s ease-out both';
+    path.style.animationDelay = `${delayMs}ms`;
+  }
+  layer.append(path);
+}
+
 export function createWindHistoryRenderer(svg) {
   const layer = el('g', { id: 'wind-history-layer' });
   svg.append(layer);
@@ -32,14 +45,10 @@ export function createWindHistoryRenderer(svg) {
     // Gale-force swath first (wider, lighter) so the hurricane-force swath
     // (narrower, stronger) reads as clearly nested inside it, same layering
     // the live map's own wind-field renderer uses for the two thresholds.
-    for (const snap of snapshots) {
-      const d = windEnvelopePathData({ lon: snap.lon, lat: snap.lat }, snap.galeRadii);
-      if (d) layer.append(el('path', { class: 'wind-history-envelope wind-history-envelope-gale', d }));
-    }
-    for (const snap of snapshots) {
-      const d = windEnvelopePathData({ lon: snap.lon, lat: snap.lat }, snap.hfwRadii);
-      if (d) layer.append(el('path', { class: 'wind-history-envelope wind-history-envelope-hfw', d }));
-    }
+    // Both fade in staggered along the same oldest-to-newest order the
+    // track draws in, so switching tabs still reads as one story.
+    snapshots.forEach((snap, i) => appendEnvelope(layer, snap, snap.galeRadii, 'wind-history-envelope-gale', i * 70));
+    snapshots.forEach((snap, i) => appendEnvelope(layer, snap, snap.hfwRadii, 'wind-history-envelope-hfw', i * 70));
   }
 
   return { render };

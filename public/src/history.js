@@ -191,6 +191,24 @@ function boundsForPoints(points) {
   return { west: cx - padLon, east: cx + padLon, south: cy - padLat, north: cy + padLat };
 }
 
+const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+// Counts a stat's leading number up from 0 rather than setting it
+// immediately -- purely cosmetic "alive" motion, so anything that isn't
+// cleanly "a number, then an optional non-digit tail" (dates, "None yet",
+// "Invest", ...) just falls back to being set directly.
+function animateNumber(el, target, suffix, duration = 700) {
+  if (reduceMotion()) { el.textContent = `${target}${suffix}`; return; }
+  const start = performance.now();
+  function tick(now) {
+    const t = Math.min(1, (now - start) / duration);
+    const eased = 1 - (1 - t) ** 3;
+    el.textContent = `${Math.round(target * eased)}${suffix}`;
+    if (t < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
 function statTile(label, value) {
   const wrap = document.createElement('div');
   wrap.className = 'history-stat';
@@ -199,8 +217,14 @@ function statTile(label, value) {
   l.textContent = label;
   const v = document.createElement('span');
   v.className = 'history-stat__value';
-  v.textContent = value;
   wrap.append(l, v);
+
+  const match = /^(-?\d+(?:\.\d+)?)([^\d].*)?$/.exec(value);
+  if (match) {
+    animateNumber(v, Number(match[1]), match[2] ?? '');
+  } else {
+    v.textContent = value;
+  }
   return wrap;
 }
 

@@ -18,6 +18,7 @@ import { projectLonLat } from '../editor/src/geo.js';
 import { createMapRenderer } from '../editor/src/mapRenderer.js';
 import { createPointRenderer } from '../editor/src/pointRenderer.js';
 import { createAnnotationRenderer } from '../editor/src/annotationRenderer.js';
+import { createLivePulseRenderer } from './livePulseRenderer.js';
 import { createTrackConeRenderer } from '../editor/src/trackConeRenderer.js';
 import { createWindFieldRenderer } from '../editor/src/windFieldRenderer.js';
 import { buildDisturbanceCalloutText, buildClassifiedCalloutText } from '../editor/src/discussionText.js';
@@ -142,6 +143,7 @@ let pointRenderer = null;
 let annotationRenderer = null;
 let trackConeRenderer = null;
 let windFieldRenderer = null;
+let livePulseRenderer = null;
 
 async function loadGeography() {
   // Relative to the document (not this module) -- fetch() resolves against
@@ -308,6 +310,7 @@ function renderMap() {
   windFieldRenderer.render({ system: selected, activeThreshold: null, bounds, width: rect.width, height: rect.height });
   renderDiscussionCallout(selected, bounds, rect);
   annotationRenderer.render({ annotations: visibleAnnotations(), selectedAnnotationId: null, draft: null, systems, bounds, width: rect.width, height: rect.height });
+  livePulseRenderer.render({ systems, bounds, width: rect.width, height: rect.height });
   pointRenderer.render({ systems, selectedId, bounds, width: rect.width, height: rect.height });
 }
 
@@ -494,6 +497,7 @@ async function init() {
   svg.append(windFieldRenderer.fieldLayer); // under the cone/markers -- see windFieldRenderer.js
   trackConeRenderer = createTrackConeRenderer(svg);
   annotationRenderer = createAnnotationRenderer(svg);
+  livePulseRenderer = createLivePulseRenderer(svg);
   pointRenderer = createPointRenderer(svg);
 
   attachNavigation({
