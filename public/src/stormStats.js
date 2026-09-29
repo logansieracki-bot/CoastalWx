@@ -1,7 +1,7 @@
 // Derived stats for the Ongoing Storm Analysis page's per-system panel
 // (see the "TROPICAL STORM HANNA"-style reference card): movement
 // (compass direction + speed between the two most recent track fixes),
-// Storm ACE, minimum central pressure, and position formatting. Pure
+// minimum central pressure, and position formatting. Pure
 // computation, no DOM -- takes the same `entries` shape history.js's own
 // historyEntriesFor() already produces ([{system, issuedAt}], oldest
 // first), so every call site just passes that straight through.
@@ -54,29 +54,6 @@ export function computeMovement(entries) {
   if (!(hoursApart > 0)) return null;
   const { bearing, distanceMiles } = bearingAndDistance(a.system, b.system);
   return { compass: compassFromBearing(bearing), speedMph: distanceMiles / hoursApart };
-}
-
-// Storm ACE (Accumulated Cyclone Energy): sum of (Vmax in knots)^2 x 1e-4
-// over every observation at or above 34kt -- the standard meteorological
-// formula, which is inherently knot-based (there's no MPH-native
-// version); this app's own explicit MPH-only rule is about what's ever
-// *displayed*, and only the resulting unitless ACE index is shown here,
-// never a raw knots figure. Real ACE sums over 6-hourly synoptic
-// observations; this app's advisories/position-log entries aren't
-// necessarily spaced exactly 6 hours apart, so treating each entry as one
-// observation is a simplification, not a rigorous reproduction.
-const ACE_THRESHOLD_KT = 34;
-const MPH_PER_KT = 1.15078;
-
-export function computeAce(entries) {
-  let total = 0;
-  for (const { system } of entries) {
-    if (system.windMph == null) continue;
-    const kt = system.windMph / MPH_PER_KT;
-    if (kt < ACE_THRESHOLD_KT) continue;
-    total += kt ** 2 * 1e-4;
-  }
-  return total;
 }
 
 export function computeMinPressure(entries) {

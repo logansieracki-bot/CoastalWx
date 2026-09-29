@@ -89,7 +89,7 @@ export function createTrackHistoryRenderer(svg) {
 
     points.forEach((p, i) => {
       const isLast = i === points.length - 1;
-      const r = unit * (isLast ? 8.5 : 5.5);
+      const r = unit * (isLast ? 11 : 7.5);
       const dot = el('circle', {
         class: `track-history-dot${isLast ? ' track-history-dot--current' : ''}`,
         cx: p.lon, cy: -p.lat, r, fill: p.color,

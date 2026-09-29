@@ -118,12 +118,16 @@
   font-size: 11px; font-weight: 800; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
 }
 
-.track-history-line { fill: none; stroke: #111820; stroke-width: 1.6px; vector-effect: non-scaling-stroke; }
-.track-history-dot {
-  stroke: #fff; stroke-width: 1.5px; vector-effect: non-scaling-stroke;
-  transform-box: fill-box; transform-origin: center; cursor: pointer;
+.track-history-line {
+  fill: none; stroke: #111820; stroke-width: 3.2px; stroke-linecap: round; vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.55));
 }
-.track-history-dot--current { stroke-width: 2.5px; }
+.track-history-dot {
+  stroke: #0a1628; stroke-width: 2.2px; vector-effect: non-scaling-stroke;
+  transform-box: fill-box; transform-origin: center; cursor: pointer;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
+.track-history-dot--current { stroke: #fff; stroke-width: 3px; }
 
 @keyframes history-dot-pop {
   from { transform: scale(0); opacity: 0; }

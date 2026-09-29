@@ -322,9 +322,9 @@ A **stat panel** (top-left of the chart, adapted from a reference NHC-style
 storm card) shows whichever system is selected: a category/probability-
 colored header, big max-wind and category (or, pre-classification,
 development-chance) figures, then position, movement (compass direction +
-speed between the two most recent fixes), minimum pressure, Storm ACE, and
-either a last-fix/next-advisory estimate (classified) or a plain
-last-updated time (pre-classification) — all derived in `stormStats.js`.
+speed between the two most recent fixes), minimum pressure, and either a
+last-fix/next-advisory estimate (classified) or a plain last-updated time
+(pre-classification) — all derived in `stormStats.js`.
 Clicking any individual point on the track itself opens a small popup with
 *that point's own* data, not the system's overall current state.
 

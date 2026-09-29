@@ -14,7 +14,7 @@ import { fitBoundsToAspect } from '../editor/src/geo.js';
 import { createMapRenderer } from '../editor/src/mapRenderer.js';
 import { createTrackHistoryRenderer } from './trackHistoryRenderer.js';
 import { createWindHistoryRenderer } from './windHistoryRenderer.js';
-import { formatPosition, computeMovement, computeAce, computeMinPressure } from './stormStats.js';
+import { formatPosition, computeMovement, computeMinPressure } from './stormStats.js';
 
 const CATEGORY_ORDER = ['ed', 'ets', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5'];
 
@@ -501,7 +501,6 @@ function renderStormPanel(system) {
 
     const minPressure = computeMinPressure(entries);
     rows.append(panelRow('Min pressure', minPressure != null ? `${minPressure} mb` : '—'));
-    rows.append(panelRow('Storm ACE', computeAce(entries).toFixed(2)));
     const latestEntry = entries[entries.length - 1];
     rows.append(panelRow('Last fix', new Date(latestEntry.issuedAt).toLocaleString()));
     const nextAdvisoryMs = new Date(latestEntry.issuedAt).getTime() + system.forecastInterval * 3600000;
