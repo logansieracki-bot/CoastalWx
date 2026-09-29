@@ -8,11 +8,13 @@
 // (see its own header comment).
 import {
   CATEGORY_INFO, categorySymbol, displayLabel, systemColor,
+  intensityScore, intensityCategoryKey, maxFormationProbabilityPct,
 } from '../editor/src/constants.js';
 import { fitBoundsToAspect } from '../editor/src/geo.js';
 import { createMapRenderer } from '../editor/src/mapRenderer.js';
 import { createTrackHistoryRenderer } from './trackHistoryRenderer.js';
 import { createWindHistoryRenderer } from './windHistoryRenderer.js';
+import { formatPosition, computeMovement, computeAce, computeMinPressure } from './stormStats.js';
 
 const CATEGORY_ORDER = ['ed', 'ets', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5'];
 
@@ -23,7 +25,7 @@ const CATEGORY_ORDER = ['ed', 'ets', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5'];
 // show, so it isn't the same dataset.
 const DEMO_SYSTEM = {
   id: 'demo-h1', season: 2025, seasonLabel: '2025-26', sequenceNumber: 4,
-  name: 'Reyes', displayName: 'Reyes', classified: true,
+  name: 'Reyes', displayName: 'Reyes', classified: true, forecastInterval: 12,
 };
 // Per-quadrant gale radii (avg matches the old single galeRadiusMi figure
 // exactly, kept alongside it since intensityScore() still takes the
@@ -97,6 +99,7 @@ const detailEl = document.getElementById('history-detail');
 const statsEl = document.getElementById('history-stats');
 const legendEl = document.getElementById('history-legend');
 const chartTabsEl = document.getElementById('history-chart-tabs');
+const stormPanelEl = document.getElementById('storm-panel');
 
 let systems = [];
 let advisories = [];
@@ -327,15 +330,141 @@ function formatProbabilities(system) {
   return parts.length ? parts.join(' · ') : '—';
 }
 
+// White text on a dark category/probability color, dark text on a light
+// one -- the palette spans from pale gray-blue through near-black purple,
+// so a single fixed text color would be unreadable against roughly half
+// of it. Simple perceived-luminance heuristic, not full WCAG contrast math
+// -- this only ever has ~11 fixed palette colors to work with, verified by
+// hand against all of them rather than needing to be exact for arbitrary input.
+function readableTextColor(hex) {
+  const c = hex.replace('#', '');
+  const r = parseInt(c.substring(0, 2), 16);
+  const g = parseInt(c.substring(2, 4), 16);
+  const b = parseInt(c.substring(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.5 ? '#0a1628' : '#ffffff';
+}
+
+function panelRow(label, value) {
+  const row = document.createElement('div');
+  row.className = 'storm-panel__row';
+  const l = document.createElement('span');
+  l.className = 'storm-panel__row-label';
+  l.textContent = label;
+  const v = document.createElement('span');
+  v.className = 'storm-panel__row-value';
+  v.textContent = value;
+  row.append(l, v);
+  return row;
+}
+
+function formatMovement(movement) {
+  if (!movement) return 'Stationary';
+  return `${movement.compass} ${Math.round(movement.speedMph)} mph`;
+}
+
+function formatCountdown(targetMs) {
+  const deltaMs = targetMs - Date.now();
+  if (deltaMs <= 0) return 'Overdue';
+  const totalMinutes = Math.round(deltaMs / 60000);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+// The reference "TROPICAL STORM HANNA" card, adapted to this app's own
+// category scale and MPH-only convention: a category/probability-colored
+// header, two hero stats, then a handful of derived rows built from
+// stormStats.js. The classified and pre-classification (Invest/
+// Disturbance) variants share the same header/position/movement rows but
+// diverge on the rest -- a classified system has wind/pressure/ACE/next-
+// advisory to show; a pre-classification one has development chance
+// instead, and no advisory schedule to estimate at all.
+function renderStormPanel(system) {
+  const entries = historyEntriesFor(system);
+  const latest = entries[entries.length - 1].system;
+  const color = systemColor(latest);
+  const textColor = readableTextColor(color);
+
+  stormPanelEl.replaceChildren();
+  stormPanelEl.hidden = false;
+
+  const header = document.createElement('div');
+  header.className = 'storm-panel__header';
+  header.style.background = color;
+  header.style.color = textColor;
+  const kind = document.createElement('span');
+  kind.className = 'storm-panel__kind';
+  const name = document.createElement('span');
+  name.className = 'storm-panel__name';
+  name.textContent = displayLabel(system);
+
+  const hero = document.createElement('div');
+  hero.className = 'storm-panel__hero';
+  const windStat = document.createElement('div');
+  windStat.className = 'storm-panel__hero-stat';
+  const windValue = document.createElement('span');
+  windValue.className = 'storm-panel__hero-value';
+  windValue.textContent = latest.windMph != null ? Math.round(latest.windMph) : '—';
+  const windLabel = document.createElement('span');
+  windLabel.className = 'storm-panel__hero-label';
+  windLabel.textContent = latest.windMph != null ? 'Max wind (mph)' : 'Max wind';
+  windStat.append(windValue, windLabel);
+
+  const secondStat = document.createElement('div');
+  secondStat.className = 'storm-panel__hero-stat';
+  const secondValue = document.createElement('span');
+  secondValue.className = 'storm-panel__hero-value';
+  const secondLabel = document.createElement('span');
+  secondLabel.className = 'storm-panel__hero-label';
+
+  const rows = document.createElement('div');
+  rows.className = 'storm-panel__rows';
+  rows.append(panelRow('Position', formatPosition(latest.lat, latest.lon)));
+  rows.append(panelRow('Movement', formatMovement(computeMovement(entries))));
+
+  if (system.classified) {
+    const categoryKey = intensityCategoryKey(intensityScore(latest));
+    kind.textContent = categoryKey ? CATEGORY_INFO[categoryKey].label : 'Classified';
+    secondValue.textContent = categorySymbol(categoryKey) ?? '—';
+    secondLabel.textContent = 'Category';
+
+    const minPressure = computeMinPressure(entries);
+    rows.append(panelRow('Min pressure', minPressure != null ? `${minPressure} mb` : '—'));
+    rows.append(panelRow('Storm ACE', computeAce(entries).toFixed(2)));
+    const latestEntry = entries[entries.length - 1];
+    rows.append(panelRow('Last fix', new Date(latestEntry.issuedAt).toLocaleString()));
+    const nextAdvisoryMs = new Date(latestEntry.issuedAt).getTime() + system.forecastInterval * 3600000;
+    rows.append(panelRow('Next advisory', formatCountdown(nextAdvisoryMs)));
+  } else {
+    kind.textContent = system.stage === 'invest' ? 'Invest' : 'Disturbance';
+    const maxPct = maxFormationProbabilityPct(system);
+    secondValue.textContent = maxPct != null ? `${maxPct}%` : '—';
+    secondLabel.textContent = 'Development chance';
+
+    const minPressure = computeMinPressure(entries);
+    if (minPressure != null) rows.append(panelRow('Min pressure', `${minPressure} mb`));
+    const latestEntry = entries[entries.length - 1];
+    rows.append(panelRow('Last updated', new Date(latestEntry.issuedAt).toLocaleString()));
+  }
+
+  secondStat.append(secondValue, secondLabel);
+  hero.append(windStat, secondStat);
+  header.append(kind, name);
+  stormPanelEl.append(header, hero, rows);
+}
+
 function renderDetail() {
   const system = systems.find((s) => s.id === selectedSystemId);
   if (!system) {
     emptyStateEl.hidden = false;
     detailEl.hidden = true;
+    stormPanelEl.hidden = true;
     return;
   }
   emptyStateEl.hidden = true;
   detailEl.hidden = false;
+  renderStormPanel(system);
 
   const advs = advisoriesFor(system.id);
 
