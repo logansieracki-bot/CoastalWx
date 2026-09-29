@@ -263,48 +263,70 @@ If no backend is reachable at all (the GitHub Pages deployment), the page
 falls back to a couple of clearly-labeled sample systems with a "DEMO
 MODE" banner, rather than an empty map or a broken page.
 
-A **sidebar overview** above the system list restates that same activity
-as two numeric tiles (systems tracked, areas of interest) that count up
-on load, and a **map legend** in the corner of the map pane explains what
-marker colors mean (formation-chance tier pre-classification, category
-once classified) — the live map previously had no key for its own colors
-at all. Every active system's marker also carries a soft pulsing "this is
-live" ring (skipped under `prefers-reduced-motion`), kept in its own
-public-only renderer rather than the shared point renderer so the
-forecaster tool's working map stays untouched.
+A slim **top navbar** (brand mark + Live Map / Ongoing Storm Analysis /
+Forecaster Sign-in links) sits above the main hero, separating wayfinding
+from branding — the hero itself no longer carries navigation links. Below
+that: a **sidebar overview** above the system list restates current
+activity as two numeric tiles (systems tracked, areas of interest) that
+count up on load, and a **map legend** in the corner of the map pane
+explains what marker colors mean (formation-chance tier pre-classification,
+category once classified) — the live map previously had no key for its
+own colors at all. Every active system's marker also carries a soft
+pulsing "this is live" ring (skipped under `prefers-reduced-motion`),
+kept in its own public-only renderer rather than the shared point
+renderer so the forecaster tool's working map stays untouched.
 
 An **activity ticker** below the header auto-generates an NHC-style
 one-line summary of current activity ("CoastalWx issuing advisories on
 **Marlowe**") straight from the same systems data as the rest of the
-page — never placeholder text.
+page — never placeholder text. A second **live status bar** right below
+it restates the same data as flowing numeric stats (active/invest
+counts, highest category, peak wind, refresh cadence) — the ticker
+reads as a sentence, this reads as at-a-glance numbers, the same pairing
+the design reference (Triple-A-Tropics) uses.
 
 ### Ongoing Storm Analysis (`/public/history.html`)
 
-A second page, linked from the header, that builds a track/intensity
-history automatically from every system's published advisories — no
-separate data entry. Since an advisory is already an immutable snapshot
-of a system's position and intensity at the moment it was issued, its
-history is just every advisory it's ever had, in order: a colored dot per
-advisory (colored by *that advisory's own* category, so the track's color
-literally traces the strengthening/weakening story) connected by a line,
-on the same basemap the live map uses, plus a stats strip (current/peak
-wind, central pressure, advisory count, latest advisory time). Systems
-with at least one advisory appear here — i.e., every system that was ever
-classified, whether still active or long since dissipated — and so does
-any currently-active **Invest**, even though it has no advisories yet
-(advisories require classification): it plots as a single current-position
-point with development-watch stats (stage, 2/5/10-day formation chance)
-in place of the wind/pressure/advisory stats a classified system shows,
-so this page doubles as the ongoing-systems view, not just an archive.
+A second page, linked from the top navbar, that builds a track/intensity
+history automatically — no separate data entry. Two sources feed it, in
+priority order: **advisories** (an immutable snapshot of a system's
+position/intensity at the moment each was published — only exists once a
+system is classified and a forecaster has actually published one), and
+failing that, an automatic **position log** (`system_position_log`,
+written server-side every time any system's lat/lon is PATCHed,
+whatever its stage). This second source is what lets a currently-active
+**Invest** — which never gets an advisory, since those require
+classification — still build up a real multi-point track/wind history as
+it's moved over time, instead of only ever showing its current live
+position. Systems with at least one advisory appear here (every system
+ever classified, active or long since dissipated), and so does any
+active Invest; a pre-classification system shows development-watch stats
+(stage, 2/5/10-day formation chance) in place of the wind/pressure/
+advisory stats a classified system shows.
+
+The track itself is colored per point (by *that point's own* category or
+formation-chance tier, not the system's current one) and the connecting
+line between each pair of points is a linear gradient between their two
+colors — interpolated, not a flat line, the same way NHC's own best-track
+plots read.
 
 A **Track History / Wind History** tab above the chart switches between
-the colored-dot track (above) and a **wind swath**: every advisory's own
-gale- and hurricane-force wind envelope (the same quadrant geometry the
-live map's wind-field editor draws, just stacked once per advisory
-instead of once for the current position) at low opacity, so the swath
-reads solid where many advisories' envelopes overlap — the core of the
-track — and fades out toward the edges of how wide the system's winds
-ever reached.
+that colored track and a **wind swath**: every point's own gale- and
+hurricane-force wind envelope (the same quadrant geometry the live map's
+wind-field editor draws, just stacked once per point instead of once for
+the current position) at opacity high enough to read clearly where many
+points' envelopes overlap — the core of the track — while fading out
+toward the edges of how wide the system's winds ever reached.
+
+A **stat panel** (top-left of the chart, adapted from a reference NHC-style
+storm card) shows whichever system is selected: a category/probability-
+colored header, big max-wind and category (or, pre-classification,
+development-chance) figures, then position, movement (compass direction +
+speed between the two most recent fixes), minimum pressure, Storm ACE, and
+either a last-fix/next-advisory estimate (classified) or a plain
+last-updated time (pre-classification) — all derived in `stormStats.js`.
+Clicking any individual point on the track itself opens a small popup with
+*that point's own* data, not the system's overall current state.
 
 To run it:
 

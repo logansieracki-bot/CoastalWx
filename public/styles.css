@@ -38,6 +38,27 @@ body {
 .demo-banner[hidden] { display: none; }
 .demo-banner a { color: #ffe9ad; }
 
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 24px; background: var(--bg-deep); border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.topbar__brand { display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); }
+.topbar__mark {
+  display: flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+  border-radius: 7px; color: var(--accent); background: rgba(94, 234, 212, 0.1); flex-shrink: 0;
+}
+.topbar__name { font-weight: 800; letter-spacing: 0.01em; }
+.topbar__links { display: flex; align-items: center; gap: 4px; }
+.topbar__link {
+  color: var(--text-muted); text-decoration: none; font-weight: 600; padding: 6px 11px; border-radius: 999px;
+  transition: background .12s ease, color .12s ease;
+}
+.topbar__link:hover { color: var(--text); background: var(--panel-hover); }
+.topbar__link.is-active { color: var(--text); background: var(--panel); }
+.topbar__link--accent { color: var(--accent); }
+.topbar__link--accent:hover { background: rgba(94, 234, 212, 0.1); }
+
 .hero {
   min-height: 66px; padding: 12px 24px; display: flex; align-items: center; gap: 20px;
   background: #0d1f38;
@@ -78,6 +99,18 @@ body {
 }
 .activity-ticker__text { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .activity-ticker__text strong { color: var(--accent); font-weight: 700; }
+
+.live-status-bar {
+  display: flex; align-items: center; gap: 10px; padding: 8px 24px;
+  background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.live-status-bar__label {
+  flex-shrink: 0; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  font-size: 10.5px; color: var(--text); background: rgba(255, 255, 255, 0.12);
+  padding: 3px 8px; border-radius: 999px;
+}
+.live-status-bar__text { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .content { flex: 1; min-height: 0; display: flex; }
 
@@ -240,4 +273,7 @@ body {
   .hero { flex-wrap: wrap; }
   .map-legend { gap: 10px; padding: 8px 10px; }
   .map-legend__swatches span { width: 15px; height: 15px; font-size: 8.5px; }
+  .topbar { flex-wrap: wrap; gap: 8px; padding: 8px 14px; }
+  .topbar__links { gap: 2px; }
+  .topbar__link { padding: 5px 8px; }
 }

@@ -128,6 +128,7 @@ const demoBannerEl = document.getElementById('demo-banner');
 const heroStatusEl = document.getElementById('hero-status');
 const activityTickerEl = document.getElementById('activity-ticker');
 const activityTickerTextEl = document.getElementById('activity-ticker-text');
+const liveStatusTextEl = document.getElementById('live-status-text');
 const systemListEl = document.getElementById('system-list');
 const discussionCalloutEl = document.getElementById('discussion-callout');
 const systemListEmptyEl = document.getElementById('system-list-empty');
@@ -537,6 +538,35 @@ function renderActivityTicker() {
   activityTickerTextEl.append('.');
 }
 
+// A denser, numbers-first companion to the ticker above -- the ticker
+// reads as a sentence, this reads as at-a-glance stats, the same pairing
+// the design reference uses (a news-style ticker plus a separate live-
+// status bar). All computed straight from the same `systems` array, no
+// separate fetch.
+function renderLiveStatusBar() {
+  const activeCount = systems.length;
+  const investCount = systems.filter((s) => s.stage === 'invest').length;
+
+  let highestCategoryKey = null;
+  for (const s of systems) {
+    if (!s.classified) continue;
+    const key = intensityCategoryKey(intensityScore(s));
+    if (key && (!highestCategoryKey || CATEGORY_ORDER.indexOf(key) > CATEGORY_ORDER.indexOf(highestCategoryKey))) {
+      highestCategoryKey = key;
+    }
+  }
+  const peakWind = systems.reduce((max, s) => (s.windMph != null && s.windMph > max ? s.windMph : max), 0);
+
+  const parts = [
+    `${activeCount} active`,
+    `${investCount} invest${investCount === 1 ? '' : 's'}`,
+    `Highest: ${highestCategoryKey ? CATEGORY_INFO[highestCategoryKey].label : '—'}`,
+    `Peak wind: ${peakWind > 0 ? `${Math.round(peakWind)} mph` : '—'}`,
+    'Auto-refresh every 60s',
+  ];
+  liveStatusTextEl.textContent = parts.join(' · ');
+}
+
 function select(systemId, { scroll = false } = {}) {
   selectedId = systemId;
   renderSystemList();
@@ -555,6 +585,7 @@ async function refresh() {
   await loadData();
   renderHeroStatus();
   renderActivityTicker();
+  renderLiveStatusBar();
   renderSidebarOverview();
   renderSystemList();
   renderMap();
