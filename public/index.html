@@ -41,13 +41,15 @@
     <p id="hero-status" class="hero__status"></p>
   </header>
 
-  <div id="activity-ticker" class="activity-ticker" hidden>
-    <span class="activity-ticker__label">Active now</span>
-    <span id="activity-ticker-text" class="activity-ticker__text"></span>
-  </div>
-  <div id="live-status-bar" class="live-status-bar">
-    <span class="live-status-bar__label">Live status</span>
-    <span id="live-status-text" class="live-status-bar__text"></span>
+  <div class="info-bar">
+    <div id="activity-ticker" class="activity-ticker" hidden>
+      <span class="activity-ticker__label"><span class="live-dot" aria-hidden="true"></span>Active now</span>
+      <span id="activity-ticker-text" class="activity-ticker__text"></span>
+    </div>
+    <div id="live-status-bar" class="live-status-bar">
+      <span class="live-status-bar__label"><span class="live-dot" aria-hidden="true"></span>Live status</span>
+      <span id="live-status-text" class="live-status-bar__text"></span>
+    </div>
   </div>
 
   <div class="content">

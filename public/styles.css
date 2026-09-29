@@ -60,7 +60,7 @@ body {
 .topbar__link--accent:hover { background: rgba(94, 234, 212, 0.1); }
 
 .hero {
-  min-height: 66px; padding: 12px 24px; display: flex; align-items: center; gap: 20px;
+  min-height: 66px; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px;
   background: #0d1f38;
   border-bottom: 1px solid var(--border);
   z-index: 30;
@@ -86,31 +86,45 @@ body {
 }
 .hero__editor-link:hover { background: var(--panel-hover); border-color: rgba(255, 255, 255, 0.22); }
 
-.activity-ticker {
-  display: flex; align-items: center; gap: 10px; padding: 8px 24px;
-  background: rgba(94, 234, 212, 0.07); border-bottom: 1px solid var(--border);
+/* Ticker (a sentence, anchored left) and live-status (numbers, anchored
+   right via margin-left: auto -- not space-between, so it stays pinned
+   to the right edge even when the ticker is hidden at zero systems)
+   share one row instead of each being its own thin left-heavy bar with
+   a dead stretch of empty background to its right. */
+.info-bar {
+  display: flex; align-items: center; gap: 20px; padding: 8px 24px; min-height: 34px;
+  background: rgba(255, 255, 255, 0.02); border-bottom: 1px solid var(--border);
   font-size: 12.5px;
 }
+.live-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; animation: live-dot-pulse 1.8s ease-in-out infinite;
+}
+@keyframes live-dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+
+.activity-ticker { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .activity-ticker[hidden] { display: none; }
 .activity-ticker__label {
-  flex-shrink: 0; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+  font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
   font-size: 10.5px; color: var(--bg-deep); background: var(--accent);
   padding: 3px 8px; border-radius: 999px;
 }
-.activity-ticker__text { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-ticker__text { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .activity-ticker__text strong { color: var(--accent); font-weight: 700; }
 
 .live-status-bar {
-  display: flex; align-items: center; gap: 10px; padding: 8px 24px;
-  background: rgba(255, 255, 255, 0.03); border-bottom: 1px solid var(--border);
-  font-size: 12.5px;
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  margin-left: auto; padding-left: 20px; border-left: 1px solid var(--border);
 }
 .live-status-bar__label {
-  flex-shrink: 0; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+  font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
   font-size: 10.5px; color: var(--text); background: rgba(255, 255, 255, 0.12);
   padding: 3px 8px; border-radius: 999px;
 }
-.live-status-bar__text { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-status-bar__text { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
 .content { flex: 1; min-height: 0; display: flex; }
 
@@ -276,4 +290,7 @@ body {
   .topbar { flex-wrap: wrap; gap: 8px; padding: 8px 14px; }
   .topbar__links { gap: 2px; }
   .topbar__link { padding: 5px 8px; }
+  .info-bar { flex-direction: column; align-items: stretch; gap: 6px; }
+  .live-status-bar { margin-left: 0; padding-left: 0; border-left: none; padding-top: 6px; border-top: 1px solid var(--border); }
+  .activity-ticker__text, .live-status-bar__text { white-space: normal; }
 }
