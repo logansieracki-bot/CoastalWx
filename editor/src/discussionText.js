@@ -2,11 +2,14 @@
 // (see main.js's renderDiscussionCallout) -- pure text generation, no DOM,
 // so it's easy to reason about and test independently of positioning.
 
-function formatLat(lat) {
+// Exported too -- stormStats.js's own position formatting (the Ongoing
+// Storm Analysis stat panel) reuses these verbatim rather than
+// re-implementing the same "1 decimal place + hemisphere letter" format.
+export function formatLat(lat) {
   return `${Math.abs(lat).toFixed(1)}${lat >= 0 ? 'N' : 'S'}`;
 }
 
-function formatLon(lon) {
+export function formatLon(lon) {
   return `${Math.abs(lon).toFixed(1)}${lon >= 0 ? 'E' : 'W'}`;
 }
 
