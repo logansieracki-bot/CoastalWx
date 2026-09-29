@@ -100,8 +100,11 @@ const statsEl = document.getElementById('history-stats');
 const legendEl = document.getElementById('history-legend');
 const chartTabsEl = document.getElementById('history-chart-tabs');
 const stormPanelEl = document.getElementById('storm-panel');
+const chartWrapEl = document.getElementById('history-chart-wrap');
+const pointPopupEl = document.getElementById('point-popup');
 
 let systems = [];
+let currentEntries = [];
 let advisories = [];
 let positionLog = [];
 let usingDemoData = false;
@@ -308,6 +311,13 @@ function renderChart() {
   if (!selectedSystemId) return;
   const rect = svg.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return;
+  const system = systems.find((s) => s.id === selectedSystemId);
+  // Kept in module state, indexed identically to the points/dots
+  // trackHistoryRenderer.js draws (each dot carries data-index) -- clicking
+  // a dot looks the full entry back up here, since the renderer only ever
+  // sees the reduced {lon, lat, color} shape, not the whole snapshot.
+  currentEntries = system ? historyEntriesFor(system) : [];
+  hidePointPopup();
   const points = pointsForSystem(selectedSystemId);
   const aspect = rect.width / Math.max(1, rect.height);
   const bounds = fitBoundsToAspect(boundsForPoints(points), aspect);
@@ -316,12 +326,72 @@ function renderChart() {
   windHistoryRenderer.render({ snapshots: snapshotsForSystem(selectedSystemId) });
 }
 
+function hidePointPopup() {
+  pointPopupEl.hidden = true;
+}
+
+function positionPointPopup(dotEl) {
+  const dotRect = dotEl.getBoundingClientRect();
+  const wrapRect = chartWrapEl.getBoundingClientRect();
+  const popupRect = pointPopupEl.getBoundingClientRect();
+  let left = dotRect.left - wrapRect.left + dotRect.width / 2 + 14;
+  let top = dotRect.top - wrapRect.top - popupRect.height / 2;
+  left = Math.min(Math.max(8, left), wrapRect.width - popupRect.width - 8);
+  top = Math.min(Math.max(8, top), wrapRect.height - popupRect.height - 8);
+  pointPopupEl.style.left = `${left}px`;
+  pointPopupEl.style.top = `${top}px`;
+}
+
+// A compact info card for one specific track point -- whichever entry the
+// clicked dot corresponds to, not the system's overall/current state (see
+// renderStormPanel for that). Reuses panelRow/formatProbabilities so its
+// styling and probability formatting stay identical to the main panel's.
+function showPointPopup(entry, dotEl) {
+  const snap = entry.system;
+  pointPopupEl.replaceChildren();
+
+  const time = document.createElement('div');
+  time.className = 'point-popup__time';
+  time.textContent = new Date(entry.issuedAt).toLocaleString();
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'point-popup__close';
+  closeBtn.textContent = '×';
+  closeBtn.setAttribute('aria-label', 'Close');
+  closeBtn.addEventListener('click', hidePointPopup);
+
+  const rows = document.createElement('div');
+  rows.className = 'point-popup__rows';
+  rows.append(panelRow('Position', formatPosition(snap.lat, snap.lon)));
+  if (snap.classified) {
+    const categoryKey = intensityCategoryKey(intensityScore(snap));
+    rows.append(panelRow('Category', categoryKey ? CATEGORY_INFO[categoryKey].label : 'Classified'));
+    rows.append(panelRow('Wind', snap.windMph != null ? `${Math.round(snap.windMph)} mph` : '—'));
+    rows.append(panelRow('Pressure', snap.pressureMb != null ? `${snap.pressureMb} mb` : '—'));
+  } else {
+    rows.append(panelRow('Formation chance', formatProbabilities(snap)));
+  }
+
+  pointPopupEl.append(closeBtn, time, rows);
+  pointPopupEl.hidden = false;
+  positionPointPopup(dotEl);
+}
+
+svg.addEventListener('click', (event) => {
+  const dot = event.target.closest?.('.track-history-dot');
+  if (!dot) { hidePointPopup(); return; }
+  const entry = currentEntries[Number(dot.dataset.index)];
+  if (entry) showPointPopup(entry, dot);
+});
+
 function setChartView(view) {
   chartView = view;
   chartTabsEl.querySelectorAll('.history-chart-tab').forEach((btn) => {
     btn.classList.toggle('is-active', btn.dataset.view === view);
   });
   svg.classList.toggle('is-wind-view', view === 'wind');
+  hidePointPopup(); // its anchor dot is a Track-view-only element, gone once wind view hides that layer
 }
 
 function formatProbabilities(system) {

@@ -93,6 +93,7 @@ export function createTrackHistoryRenderer(svg) {
       const dot = el('circle', {
         class: `track-history-dot${isLast ? ' track-history-dot--current' : ''}`,
         cx: p.lon, cy: -p.lat, r, fill: p.color,
+        'data-index': i,
       });
       if (!reduceMotion()) {
         dot.style.animation = 'history-dot-pop .45s cubic-bezier(.2,1.4,.4,1) both';
