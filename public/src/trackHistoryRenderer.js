@@ -25,25 +25,28 @@ function screenUnit(bounds, width, height) {
 
 const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-// "Draws" the line in from oldest to newest point via the classic
-// stroke-dasharray/dashoffset trick, rather than appearing all at once.
-// The double rAF is required, not decorative -- a single frame lets the
-// browser coalesce the initial (offset = full length) and final
+// "Draws" a segment in via the classic stroke-dasharray/dashoffset trick,
+// staggered by `delayMs` so a multi-segment line still reads as one
+// continuous oldest-to-newest sweep rather than every segment animating
+// at once. The double rAF is required, not decorative -- a single frame
+// lets the browser coalesce the initial (offset = full length) and final
 // (offset = 0) style writes into one paint, skipping the transition
 // entirely; the extra frame forces the starting state to actually paint
 // first.
-function animateDrawIn(path) {
+function animateDrawIn(path, delayMs) {
   if (reduceMotion()) return;
   const length = path.getTotalLength();
   path.style.strokeDasharray = String(length);
   path.style.strokeDashoffset = String(length);
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      path.style.transition = 'stroke-dashoffset 1.1s ease-out';
+      path.style.transition = `stroke-dashoffset .5s ease-out ${delayMs}ms`;
       path.style.strokeDashoffset = '0';
     });
   });
 }
+
+let gradientSeq = 0;
 
 export function createTrackHistoryRenderer(svg) {
   const layer = el('g', { id: 'track-history-layer' });
@@ -56,11 +59,32 @@ export function createTrackHistoryRenderer(svg) {
 
     const unit = screenUnit(bounds, width, height);
 
+    // One short segment per pair of consecutive points, each stroked with
+    // its own linear gradient from the earlier point's color to the
+    // later one's -- "interpolates" the track's color between fixes the
+    // same way NHC's own best-track plots do, instead of one flat-color
+    // line. gradientUnits="userSpaceOnUse" with the segment's own raw
+    // lon/-lat endpoints means the gradient direction always follows the
+    // segment itself, whichever way it runs.
     if (points.length >= 2) {
-      const d = `M${points.map((p) => `${p.lon},${-p.lat}`).join(' L')}`;
-      const path = el('path', { class: 'track-history-line', d });
-      layer.append(path);
-      animateDrawIn(path);
+      const defs = el('defs');
+      layer.append(defs);
+      for (let i = 0; i < points.length - 1; i++) {
+        const a = points[i];
+        const b = points[i + 1];
+        const gradId = `track-grad-${gradientSeq++}`;
+        const gradient = el('linearGradient', {
+          id: gradId, gradientUnits: 'userSpaceOnUse', x1: a.lon, y1: -a.lat, x2: b.lon, y2: -b.lat,
+        });
+        gradient.append(el('stop', { offset: '0%', 'stop-color': a.color }));
+        gradient.append(el('stop', { offset: '100%', 'stop-color': b.color }));
+        defs.append(gradient);
+
+        const seg = el('path', { class: 'track-history-line', d: `M${a.lon},${-a.lat} L${b.lon},${-b.lat}` });
+        seg.style.stroke = `url(#${gradId})`; // inline style, not the attrs helper -- must outrank the CSS class's own flat fallback stroke
+        layer.append(seg);
+        animateDrawIn(seg, i * 90);
+      }
     }
 
     points.forEach((p, i) => {
