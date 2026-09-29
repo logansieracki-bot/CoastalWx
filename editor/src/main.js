@@ -747,7 +747,7 @@ function renderAdvisoriesSection(system) {
   publishBtn.disabled = !canPublish;
   publishBtn.title = localOnly ? 'Advisories require the real hosted backend -- not available in local-only mode' : (canPublish ? '' : 'Requires Forecaster role or higher');
   publishBtn.addEventListener('click', async () => {
-    if (!confirm(`Publish advisory #${own.length + 1} for ${displayLabel(system)}? This creates a permanent record of its current data and forecast track.`)) return;
+    if (!confirm(`Publish advisory #${own.length + 1} for ${displayLabel(system)}? This creates a permanent record of its current data${system.classified ? ' and forecast track' : ''}.`)) return;
     const created = await api.createAdvisory(system.id, { discussion: discussionTextarea.value.trim() || null });
     advisories = [...advisories, created];
     renderSidebar();
@@ -1058,10 +1058,13 @@ function renderSelectedPanel() {
   renderIntensitySection(system, { windInput, gustInput, pressureInput });
   if (system.classified) {
     renderForecastTrackSection(system);
-    renderAdvisoriesSection(system);
   } else {
     renderAnnotationsSection(system);
   }
+  // Advisories can be published at any stage -- Disturbance, Invest, or
+  // Classified (see server/src/advisories.js) -- so this section is never
+  // gated on classified, unlike the track/cone and annotations sections above.
+  renderAdvisoriesSection(system);
 }
 
 function renderSidebar() {

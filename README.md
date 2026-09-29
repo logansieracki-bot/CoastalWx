@@ -210,16 +210,23 @@ Accounts panel in the editor sidebar for every account after that.
 ## Storm naming
 
 Once a system is **Classified**, it's automatically given the next unused
-name for its season from the `storm_names` table (seeded with a
-placeholder alphabetical list, A through W skipping Q/U/X/Y/Z — edit that
-table directly for real names). A name is permanently retired the moment
-it's assigned, even if that system later weakens.
+name for its season from the `storm_names` table. The first time a season
+needs a name, it's seeded A through W (skipping Q/U/X/Y/Z, same as NHC's
+own Atlantic convention) by drawing one random name per letter from a
+candidate pool (`server/src/stormNames.js`'s `NAME_POOL`) — so the actual
+list varies season to season while still being handed out alphabetically
+within a season. Once a season is seeded its list is fixed in the
+database; edit that pool (or the `storm_names` rows directly) for real
+curated names. A name is permanently retired the moment it's assigned,
+even if that system later weakens.
 
 ## Advisories
 
-Once classified, a system's panel gets a **Publish Advisory** button
-(Forecaster role or higher, confirmation-gated) that snapshots its full
-current data and forecast track as an immutable, auto-numbered record.
+Every system's panel gets a **Publish Advisory** button (Forecaster role
+or higher, confirmation-gated) — at any stage, not just once classified,
+matching how NHC issues text products on disturbances well before
+naming. Publishing snapshots the system's full current data, plus its
+forecast track once it has one, as an immutable, auto-numbered record.
 For exactly one hour after publishing, that advisory shows an emergency
 **Cancel** button (same role, a second confirmation) that fully and
 permanently deletes it — not a retraction, a true undo. After the hour,
@@ -256,8 +263,9 @@ editor's own map/marker/cone/wind-field/annotation rendering code (imported
 directly, not duplicated) but none of its editing machinery — there is no
 write-capable UI on this page at all, not even a disabled one. Before a
 system is Classified, its card shows only formation probabilities — no
-intensity or category information appears until it's active; once
-Classified, the card also shows its latest advisory's issued time.
+intensity or category information appears until it's active; once any
+advisory has been published for it (at any stage), the card also shows
+that advisory's issued time.
 
 If no backend is reachable at all (the GitHub Pages deployment), the page
 falls back to a couple of clearly-labeled sample systems with a "DEMO

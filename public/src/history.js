@@ -157,11 +157,11 @@ function positionLogFor(systemId) {
   return positionLog.filter((r) => r.systemId === systemId).sort((a, b) => new Date(a.recordedAt) - new Date(b.recordedAt));
 }
 
-// Systems with at least one published advisory (a full snapshot history),
-// plus any currently-active Invest -- an Invest never gets an advisory
-// (advisories require classification), but it's still an ongoing system
-// worth tracking here, not just the fully-advisoried, named cyclones.
-// Plain Disturbances (pre-Invest) stay off this list, same as before.
+// Systems with at least one published advisory (a full snapshot history --
+// publishing is allowed at any stage, see server/src/advisories.js), plus
+// any currently-active Invest that hasn't published one yet -- still an
+// ongoing system worth tracking here, not just the fully-advisoried, named
+// cyclones. A plain Disturbance with zero advisories stays off this list.
 function systemsForHistoryPage() {
   const withAdvisories = new Set(advisories.map((a) => a.systemId));
   return systems.filter((s) => withAdvisories.has(s.id) || s.stage === 'invest');

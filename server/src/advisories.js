@@ -43,7 +43,6 @@ advisoriesRouter.get('/advisories', (req, res) => {
 advisoriesRouter.post('/systems/:systemId/advisories', requireRole('owner', 'admin', 'forecaster'), (req, res) => {
   const system = db.prepare('SELECT * FROM systems WHERE id = ?').get(req.params.systemId);
   if (!system) return res.status(404).json({ error: 'system not found' });
-  if (!system.classified) return res.status(409).json({ error: 'system must be classified before publishing an advisory' });
 
   const { headline, discussion } = req.body ?? {};
   // The immutable historical record: the system's full current data plus
