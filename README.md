@@ -311,12 +311,18 @@ colors — interpolated, not a flat line, the same way NHC's own best-track
 plots read.
 
 A **Track History / Wind History** tab above the chart switches between
-that colored track and a **wind swath**: every point's own gale- and
-hurricane-force wind envelope (the same quadrant geometry the live map's
-wind-field editor draws, just stacked once per point instead of once for
-the current position) at opacity high enough to read clearly where many
-points' envelopes overlap — the core of the track — while fading out
-toward the edges of how wide the system's winds ever reached.
+that colored track and a **wind swath**, modeled directly on NHC's own
+"Tropical Storm and Hurricane Force Wind Swaths" product: a single
+continuous band, not a shape sitting at each recorded point. Since the
+track only ever has a handful of snapshots, each consecutive pair is
+densely subdivided (roughly one interpolated ring every 15 miles of
+travel), interpolating both the position and the gale-/hurricane-force
+quadrant radii at every substep — so the swath's width genuinely grows
+and shrinks along the track instead of jumping at each point or leaving
+gaps between widely-spaced ones. Rendered as many fully-opaque,
+identically-colored rings, the result reads as one seamless two-toned
+band (wider gale-force outside, narrower hurricane-force nested inside)
+tapering naturally wherever the recorded radii do.
 
 A **stat panel** (top-left of the chart, adapted from a reference NHC-style
 storm card) shows whichever system is selected: a category/probability-
