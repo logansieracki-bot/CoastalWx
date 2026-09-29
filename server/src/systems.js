@@ -180,13 +180,26 @@ systemsRouter.patch('/systems/:id', requireRole(...ROLES), (req, res) => {
     }
   }
 
+  const now = new Date().toISOString();
   updates.push('updated_at = ?');
-  values.push(new Date().toISOString());
+  values.push(now);
   values.push(req.params.id);
 
   db.prepare(`UPDATE systems SET ${updates.join(', ')} WHERE id = ?`).run(...values);
   const row = db.prepare('SELECT * FROM systems WHERE id = ?').get(req.params.id);
-  res.json(toApi(row));
+  const api = toApi(row);
+
+  // Every time a system actually moves -- any stage, not just once it's
+  // classified and advisories exist -- log a full snapshot. This is the
+  // only thing that lets an Invest (or a plain Disturbance) build up a
+  // real track/wind history over time instead of the ongoing-analysis
+  // page only ever having its current live position to show.
+  if (Object.prototype.hasOwnProperty.call(body, 'lat') || Object.prototype.hasOwnProperty.call(body, 'lon')) {
+    db.prepare('INSERT INTO system_position_log (id, system_id, snapshot_json, recorded_at) VALUES (?, ?, ?, ?)')
+      .run(randomUUID(), req.params.id, JSON.stringify(api), now);
+  }
+
+  res.json(api);
 });
 
 systemsRouter.delete('/systems/:id', requireRole('owner', 'admin', 'forecaster'), (req, res) => {

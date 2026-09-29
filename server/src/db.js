@@ -133,6 +133,26 @@ db.exec(`
 
 db.exec('CREATE INDEX IF NOT EXISTS idx_advisories_system_id ON advisories(system_id)');
 
+// A lightweight, automatic position/intensity log -- one row captured every
+// time a system's lat/lon is PATCHed, for every stage (disturbance, invest,
+// classified alike), unlike advisories.snapshot_json above which only ever
+// exists for classified systems that a forecaster has explicitly published.
+// This is what lets an Invest (or even a plain Disturbance) build up a real
+// track/wind history over time instead of the ongoing-analysis page only
+// ever being able to show its current live position. Same snapshot_json
+// shape as advisories (a full systems.toApi() record) so both sources can
+// feed the same rendering code on the client.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS system_position_log (
+    id TEXT PRIMARY KEY,
+    system_id TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+    snapshot_json TEXT NOT NULL,
+    recorded_at TEXT NOT NULL
+  )
+`);
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_system_position_log_system_id ON system_position_log(system_id)');
+
 // --- Additive migrations -- columns added after each table's initial
 // CREATE TABLE above. CREATE TABLE IF NOT EXISTS is a no-op against an
 // existing database file, so anyone with data from before these columns

@@ -278,7 +278,7 @@ one-line summary of current activity ("CoastalWx issuing advisories on
 **Marlowe**") straight from the same systems data as the rest of the
 page — never placeholder text.
 
-### Storm History (`/public/history.html`)
+### Ongoing Storm Analysis (`/public/history.html`)
 
 A second page, linked from the header, that builds a track/intensity
 history automatically from every system's published advisories — no

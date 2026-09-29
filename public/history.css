@@ -1,6 +1,6 @@
-/* Storm History page -- supplements styles.css (shared shell/hero/system-list
-   rules) with the parts unique to this page: the stats/chart pane and the
-   track-history dots/line themselves. */
+/* Ongoing Storm Analysis page -- supplements styles.css (shared shell/hero/
+   system-list rules) with the parts unique to this page: the stats/chart
+   pane and the track-history dots/line themselves. */
 
 .history-pane {
   flex: 1; position: relative; overflow: hidden; overflow-y: auto;
@@ -51,8 +51,8 @@
    read as faint, the same "how wide did it get, and where" swath the
    reference design uses, built from overlap instead of a merged shape. */
 .wind-history-envelope { pointer-events: none; }
-.wind-history-envelope-gale { fill: rgba(240, 188, 74, 0.1); }
-.wind-history-envelope-hfw { fill: rgba(224, 100, 100, 0.16); }
+.wind-history-envelope-gale { fill: rgba(240, 188, 74, 0.3); }
+.wind-history-envelope-hfw { fill: rgba(224, 100, 100, 0.42); }
 
 /* Track History and Wind History are mutually-exclusive full-chart views,
    toggled by the tabs above; both layers are always kept rendered

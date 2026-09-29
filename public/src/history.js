@@ -1,10 +1,11 @@
-// Storm History: an automatic, no-manual-entry archive built entirely from
-// advisories already published through the normal editor workflow. Every
-// advisory is an immutable snapshot (see server/src/advisories.js) of a
-// system's position/intensity at the moment it was issued -- exactly the
-// raw material a track/intensity history needs, with nothing extra to
-// author. Reuses the editor's own map + constants, same relative-import
-// reasoning as public/src/main.js (see its own header comment).
+// Ongoing Storm Analysis: an automatic, no-manual-entry archive built
+// entirely from advisories already published through the normal editor
+// workflow. Every advisory is an immutable snapshot (see
+// server/src/advisories.js) of a system's position/intensity at the
+// moment it was issued -- exactly the raw material a track/intensity
+// history needs, with nothing extra to author. Reuses the editor's own
+// map + constants, same relative-import reasoning as public/src/main.js
+// (see its own header comment).
 import {
   CATEGORY_INFO, categorySymbol, displayLabel, systemColor,
 } from '../editor/src/constants.js';
@@ -63,10 +64,29 @@ const DEMO_INVEST = {
   lon: -48, lat: 21,
   formationProbability2dayPct: 20, formationProbability5dayPct: 60, formationProbability10dayPct: 80,
   windMph: null, gustMph: null, pressureMb: null,
-  galeRadiusNeMi: null, galeRadiusSeMi: null, galeRadiusSwMi: null, galeRadiusNwMi: null,
+  galeRadiusNeMi: 70, galeRadiusSeMi: 60, galeRadiusSwMi: 45, galeRadiusNwMi: 65,
   hurricaneForceRadiusNeMi: null, hurricaneForceRadiusSeMi: null, hurricaneForceRadiusSwMi: null, hurricaneForceRadiusNwMi: null,
   updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
 };
+// system_position_log rows captured as this same Invest moved over the
+// past ~20 hours -- demonstrates that an Invest (no advisories, so no
+// server/src/advisories.js snapshots exist for it) still builds up a real
+// multi-point track/wind history from the automatic position log alone.
+// The last entry intentionally matches DEMO_INVEST's own current fields.
+const NO_GALE_RADII = { galeRadiusNeMi: null, galeRadiusSeMi: null, galeRadiusSwMi: null, galeRadiusNwMi: null };
+const DEMO_INVEST_LOG = [
+  { lon: -54, lat: 17, formationProbability2dayPct: 10, formationProbability5dayPct: 30, formationProbability10dayPct: 50, ...NO_GALE_RADII },
+  { lon: -52, lat: 18.5, formationProbability2dayPct: 15, formationProbability5dayPct: 45, formationProbability10dayPct: 65, ...NO_GALE_RADII },
+  { lon: -50, lat: 19.5, formationProbability2dayPct: 20, formationProbability5dayPct: 55, formationProbability10dayPct: 75,
+    galeRadiusNeMi: 60, galeRadiusSeMi: 50, galeRadiusSwMi: 40, galeRadiusNwMi: 55 },
+  { lon: -48, lat: 21, formationProbability2dayPct: 20, formationProbability5dayPct: 60, formationProbability10dayPct: 80,
+    galeRadiusNeMi: 70, galeRadiusSeMi: 60, galeRadiusSwMi: 45, galeRadiusNwMi: 65 },
+];
+const DEMO_POSITION_LOG = DEMO_INVEST_LOG.map((snap, i) => ({
+  id: `demo-h-log-${i + 1}`, systemId: DEMO_INVEST.id,
+  recordedAt: new Date(Date.now() - (DEMO_INVEST_LOG.length - i) * 5 * 60 * 60 * 1000).toISOString(),
+  snapshot: { ...DEMO_INVEST, ...snap },
+}));
 
 const svg = document.getElementById('history-chart');
 const demoBannerEl = document.getElementById('demo-banner');
@@ -80,6 +100,7 @@ const chartTabsEl = document.getElementById('history-chart-tabs');
 
 let systems = [];
 let advisories = [];
+let positionLog = [];
 let usingDemoData = false;
 let selectedSystemId = null;
 let chartView = 'track';
@@ -106,13 +127,17 @@ async function fetchJson(path) {
 
 async function loadData() {
   try {
-    const [nextSystems, nextAdvisories] = await Promise.all([fetchJson('api/systems'), fetchJson('api/advisories')]);
+    const [nextSystems, nextAdvisories, nextPositionLog] = await Promise.all([
+      fetchJson('api/systems'), fetchJson('api/advisories'), fetchJson('api/position-log'),
+    ]);
     systems = nextSystems;
     advisories = nextAdvisories;
+    positionLog = nextPositionLog;
     usingDemoData = false;
   } catch {
     systems = [DEMO_SYSTEM, DEMO_INVEST];
     advisories = DEMO_ADVISORIES;
+    positionLog = DEMO_POSITION_LOG;
     usingDemoData = true;
   }
   demoBannerEl.hidden = !usingDemoData;
@@ -120,6 +145,10 @@ async function loadData() {
 
 function advisoriesFor(systemId) {
   return advisories.filter((a) => a.systemId === systemId).sort((a, b) => a.number - b.number);
+}
+
+function positionLogFor(systemId) {
+  return positionLog.filter((r) => r.systemId === systemId).sort((a, b) => new Date(a.recordedAt) - new Date(b.recordedAt));
 }
 
 // Systems with at least one published advisory (a full snapshot history),
@@ -132,15 +161,27 @@ function systemsForHistoryPage() {
   return systems.filter((s) => withAdvisories.has(s.id) || s.stage === 'invest');
 }
 
-// The chronological record this page draws from: one entry per published
-// advisory (each a frozen snapshot), or -- for a system with none yet,
-// i.e. an Invest still only being watched -- a single synthetic "current"
-// entry built straight from the live record, so it still plots as a
-// (one-point) track instead of crashing or rendering nothing.
+// The chronological record this page draws from, in priority order:
+// 1. One entry per published advisory (each a frozen snapshot) -- richest
+//    and most authoritative, but only ever exists once a system has been
+//    classified and a forecaster has actually published one.
+// 2. Failing that, the automatic position log (system_position_log,
+//    written server-side every time the system's lat/lon moves -- see
+//    server/src/systems.js) -- this is what gives an Invest, or even a
+//    plain pre-Invest Disturbance, a real multi-point track/wind history
+//    instead of only ever having "wherever it is right now."
+// 3. Failing *that* too (a brand new system that hasn't moved since this
+//    logging existed, or a backend that predates it), a single synthetic
+//    "current" entry built straight from the live record, so it still
+//    plots as a one-point track instead of rendering nothing.
 function historyEntriesFor(system) {
   const advs = advisoriesFor(system.id);
   if (advs.length) {
     return advs.map((a) => ({ system: a.snapshot.system, issuedAt: a.issuedAt }));
+  }
+  const log = positionLogFor(system.id);
+  if (log.length) {
+    return log.map((row) => ({ system: row.snapshot, issuedAt: row.recordedAt }));
   }
   return [{ system, issuedAt: system.updatedAt || system.createdAt || new Date().toISOString() }];
 }
@@ -194,9 +235,12 @@ function boundsForPoints(points) {
 const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 // Counts a stat's leading number up from 0 rather than setting it
-// immediately -- purely cosmetic "alive" motion, so anything that isn't
-// cleanly "a number, then an optional non-digit tail" (dates, "None yet",
-// "Invest", ...) just falls back to being set directly.
+// immediately -- purely cosmetic "alive" motion. Only called for tiles
+// that are actually a measurement (see the `animate` flag on statTile) --
+// a regex-based "does this look like a number" guess used to decide this
+// instead, and wrongly caught things like a "2025-26" season label,
+// animating its leading "2025" up from zero (briefly showing nonsense
+// like "1992-26" mid-flight) -- explicit opt-in per call site instead.
 function animateNumber(el, target, suffix, duration = 700) {
   if (reduceMotion()) { el.textContent = `${target}${suffix}`; return; }
   const start = performance.now();
@@ -209,7 +253,11 @@ function animateNumber(el, target, suffix, duration = 700) {
   requestAnimationFrame(tick);
 }
 
-function statTile(label, value) {
+// `animate: true` only for tiles that are genuinely a measurement counting
+// up to a value (wind, pressure, a count) -- everything else (names,
+// dates, season labels, freeform text) always renders as plain text, even
+// when it happens to start with a digit.
+function statTile(label, value, { animate = false } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'history-stat';
   const l = document.createElement('span');
@@ -219,7 +267,7 @@ function statTile(label, value) {
   v.className = 'history-stat__value';
   wrap.append(l, v);
 
-  const match = /^(-?\d+(?:\.\d+)?)([^\d].*)?$/.exec(value);
+  const match = animate ? /^(-?\d+(?:\.\d+)?)([^\d].*)?$/.exec(value) : null;
   if (match) {
     animateNumber(v, Number(match[1]), match[2] ?? '');
   } else {
@@ -298,10 +346,10 @@ function renderDetail() {
     statsEl.replaceChildren(
       statTile('System', displayLabel(system)),
       statTile('Season', system.seasonLabel),
-      statTile('Current wind', latestSnap.windMph != null ? `${Math.round(latestSnap.windMph)} mph` : '—'),
-      statTile('Peak wind', `${Math.round(peakWind)} mph`),
-      statTile('Central pressure', latestSnap.pressureMb != null ? `${latestSnap.pressureMb} mb` : '—'),
-      statTile('Advisories', String(advs.length)),
+      statTile('Current wind', latestSnap.windMph != null ? `${Math.round(latestSnap.windMph)} mph` : '—', { animate: latestSnap.windMph != null }),
+      statTile('Peak wind', `${Math.round(peakWind)} mph`, { animate: true }),
+      statTile('Central pressure', latestSnap.pressureMb != null ? `${latestSnap.pressureMb} mb` : '—', { animate: latestSnap.pressureMb != null }),
+      statTile('Advisories', String(advs.length), { animate: true }),
       statTile('Latest advisory', new Date(latest.issuedAt).toLocaleString()),
     );
   } else {
@@ -384,5 +432,5 @@ async function init() {
 
 init().catch((err) => {
   console.error(err);
-  document.body.insertAdjacentHTML('beforeend', `<div class="fatal-error">Failed to load Storm History: ${err.message}</div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div class="fatal-error">Failed to load Ongoing Storm Analysis: ${err.message}</div>`);
 });
