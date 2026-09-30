@@ -181,6 +181,13 @@ body {
   background: rgba(255, 255, 255, 0.07); border-radius: 7px; padding: 4px 9px; font-size: 11.5px; font-weight: 600;
 }
 
+.system-card__download {
+  margin-top: 10px; padding: 7px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
+  color: var(--accent); background: rgba(94, 234, 212, 0.1); border: 1px solid rgba(94, 234, 212, 0.35);
+  cursor: pointer;
+}
+.system-card__download:hover { background: rgba(94, 234, 212, 0.18); }
+
 .map-pane {
   flex: 1; position: relative; background: var(--water); overflow: hidden;
   margin: 14px 14px 14px 0; border-radius: 14px; border: 1px solid var(--border);

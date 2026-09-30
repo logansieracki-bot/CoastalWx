@@ -25,6 +25,7 @@ import { createWindFieldRenderer } from '../editor/src/windFieldRenderer.js';
 import { buildDisturbanceCalloutText, buildClassifiedCalloutText } from '../editor/src/discussionText.js';
 import { placeCallout } from '../editor/src/calloutPlacement.js';
 import { buildConeDisks } from '../editor/src/trackGeometry.js';
+import { exportSvgAsPng } from '../editor/src/imageExport.js';
 
 const POLL_INTERVAL_MS = 60000;
 
@@ -412,6 +413,30 @@ function infoRow(label, value) {
 // No intensity/category information is shown at all until a system is
 // Classified -- only its formation probabilities -- matching the public
 // page's core rule ("no intensity scale until its active").
+// Nothing to export for a system with no public map presence yet (see
+// publicViewFor) -- the button only ever appears once `view.published`
+// is true, same gate everything else on this card already follows.
+function appendDownloadImageButton(wrap, system, view) {
+  if (!view.published) return;
+  const btn = document.createElement('button');
+  btn.className = 'system-card__download';
+  btn.textContent = 'Download Map Image';
+  btn.title = 'Save the current map view as a PNG, to share outside CoastalWx.';
+  btn.addEventListener('click', async () => {
+    try {
+      const waterColor = getComputedStyle(document.documentElement).getPropertyValue('--water').trim();
+      const safeName = displayLabel(system).replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+      await exportSvgAsPng(svg, {
+        fileName: `${safeName}-${new Date().toISOString().slice(0, 10)}.png`,
+        backgroundColor: waterColor,
+      });
+    } catch (err) {
+      alert(`Couldn't export the map image: ${err.message}`);
+    }
+  });
+  wrap.append(btn);
+}
+
 function buildCardDetail(system, view) {
   const wrap = document.createElement('div');
   wrap.className = 'system-card__detail';
@@ -431,6 +456,7 @@ function buildCardDetail(system, view) {
       ['10-day formation chance', system.formationProbability10dayPct],
     ];
     for (const [label, value] of probs) wrap.append(infoRow(label, value == null ? 'Not assessed' : `${value}%`));
+    appendDownloadImageButton(wrap, system, view);
     return wrap;
   }
 
@@ -460,6 +486,7 @@ function buildCardDetail(system, view) {
     ? infoRow('Latest advisory', new Date(advisory.issuedAt).toLocaleString())
     : infoRow('Status', 'No advisory published yet.'));
 
+  appendDownloadImageButton(wrap, system, view);
   return wrap;
 }
 

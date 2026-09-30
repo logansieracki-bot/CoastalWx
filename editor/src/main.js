@@ -16,6 +16,7 @@ import { projectLonLat } from './geo.js';
 import { api, detectBackend } from './api.js';
 import { buildDisturbanceCalloutText, buildClassifiedCalloutText } from './discussionText.js';
 import { placeCallout } from './calloutPlacement.js';
+import { exportSvgAsPng } from './imageExport.js';
 
 const svg = document.getElementById('map');
 const systemsListEl = document.getElementById('systems-list');
@@ -1046,6 +1047,23 @@ function renderSelectedPanel() {
   meta.className = 'selected-meta';
   meta.textContent = `${system.seasonLabel} season · ${system.lat.toFixed(2)}°N, ${Math.abs(system.lon).toFixed(2)}°W`;
   selectedPanelEl.append(meta);
+
+  const downloadImageBtn = document.createElement('button');
+  downloadImageBtn.textContent = 'Download Map Image';
+  downloadImageBtn.title = 'Save the current map view as a PNG, to share outside the app.';
+  downloadImageBtn.addEventListener('click', async () => {
+    try {
+      const waterColor = getComputedStyle(document.documentElement).getPropertyValue('--water-color').trim();
+      const safeName = displayLabel(system).replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+      await exportSvgAsPng(svg, {
+        fileName: `${safeName}-${new Date().toISOString().slice(0, 10)}.png`,
+        backgroundColor: waterColor,
+      });
+    } catch (err) {
+      alert(`Couldn't export the map image: ${err.message}`);
+    }
+  });
+  selectedPanelEl.append(downloadImageBtn);
 
   const formedBtn = document.createElement('button');
   formedBtn.className = `formed-toggle${system.formed ? ' is-active' : ''}`;
