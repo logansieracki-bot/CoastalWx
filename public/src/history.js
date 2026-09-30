@@ -11,6 +11,7 @@ import {
   intensityScore, intensityCategoryKey, maxFormationProbabilityPct,
 } from '../editor/src/constants.js';
 import { fitBoundsToAspect } from '../editor/src/geo.js';
+import { destinationPoint } from '../editor/src/windFieldGeometry.js';
 import { createMapRenderer } from '../editor/src/mapRenderer.js';
 import { createTrackHistoryRenderer } from './trackHistoryRenderer.js';
 import { createWindHistoryRenderer } from './windHistoryRenderer.js';
@@ -231,6 +232,25 @@ function snapshotsForSystem(systemId) {
   }));
 }
 
+// Bounds computed from track points alone have no idea how far a wide
+// gale radius actually reaches -- the Wind tab would silently clip a
+// swath's outer rings off-screen. Expand the point set fed to
+// boundsForPoints with each snapshot's four quadrant extents (reusing
+// windFieldGeometry.js's own center+bearing+distance math, the same thing
+// that draws the rings in the first place) so both tabs frame on the
+// widest of the track or the swath, never just the track.
+const QUADRANT_BEARINGS = { ne: 45, se: 135, sw: 225, nw: 315 };
+function radiusExtentPoints(snapshots) {
+  const points = [];
+  for (const snap of snapshots) {
+    for (const [quadrant, bearing] of Object.entries(QUADRANT_BEARINGS)) {
+      const miles = snap.galeRadii?.[quadrant];
+      if (miles) points.push(destinationPoint({ lon: snap.lon, lat: snap.lat }, bearing, miles));
+    }
+  }
+  return points;
+}
+
 // `fallbackCenter`: a not-yet-Formed system can have zero points (see
 // formedEntriesFor) -- frame the map on its live lon/lat anyway (just
 // camera framing, not a plotted position) rather than collapsing to
@@ -334,11 +354,13 @@ function renderChart() {
   currentEntries = system ? formedEntriesFor(system) : [];
   hidePointPopup();
   const points = pointsForSystem(selectedSystemId);
+  const snapshots = snapshotsForSystem(selectedSystemId);
   const aspect = rect.width / Math.max(1, rect.height);
-  const bounds = fitBoundsToAspect(boundsForPoints(points, system && { lon: system.lon, lat: system.lat }), aspect);
+  const boundsPoints = [...points, ...radiusExtentPoints(snapshots)];
+  const bounds = fitBoundsToAspect(boundsForPoints(boundsPoints, system && { lon: system.lon, lat: system.lat }), aspect);
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
   trackHistoryRenderer.render({ points, bounds, width: rect.width, height: rect.height });
-  windHistoryRenderer.render({ snapshots: snapshotsForSystem(selectedSystemId) });
+  windHistoryRenderer.render({ snapshots });
 }
 
 function hidePointPopup() {

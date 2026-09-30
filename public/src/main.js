@@ -221,13 +221,15 @@ function currentBounds() {
   return getAspectFittedBounds(viewState, aspect);
 }
 
-// Mirrors editor/src/main.js's selectedSystemTrackPoints() -- a system's
+// Shared by trackPointsFor (live) and publicViewFor (advisory-snapshotted)
+// below -- both feed it the same {id, lon, lat, hour, spreadMi, windMph}
+// shape (forecastPoints.js's toApi() and an advisory's own snapshot use
+// identical field names), just from a different source array. A system's
 // own position is always its synthetic hour-0 point, prepended ahead of
-// its saved forecast points. A non-classified system never has a track.
-function trackPointsFor(system) {
-  if (!system || !system.classified) return [];
-  const own = forecastPoints
-    .filter((p) => p.systemId === system.id)
+// the real forecast points.
+function mapTrackPoints(rawPoints, system) {
+  const own = rawPoints
+    .slice()
     .sort((a, b) => a.sequence - b.sequence)
     .map((p) => ({
       id: p.id, lon: p.lon, lat: p.lat, hour: p.hour, spread: p.spreadMi,
@@ -236,9 +238,52 @@ function trackPointsFor(system) {
   return [{ lon: system.lon, lat: system.lat, hour: 0, spread: 0 }, ...own];
 }
 
+// Mirrors editor/src/main.js's selectedSystemTrackPoints(). LIVE forecast
+// points for a system -- only right for a not-yet-classified system (which
+// never has a track at all) or internally before advisory-gating applies;
+// see publicViewFor for what a classified system's track actually shows.
+function trackPointsFor(system) {
+  if (!system || !system.classified) return [];
+  return mapTrackPoints(forecastPoints.filter((p) => p.systemId === system.id), system);
+}
+
 function latestAdvisoryFor(systemId) {
   const own = advisories.filter((a) => a.systemId === systemId);
   return own.reduce((latest, a) => (!latest || new Date(a.issuedAt) > new Date(latest.issuedAt) ? a : latest), null);
+}
+
+// Once Classified, everything shown publicly for a system -- marker color/
+// symbol, wind/gust/pressure, the forecast cone/track, the wind field --
+// comes from the latest PUBLISHED advisory's frozen snapshot, never live
+// editor data, so a forecaster can freely edit/save in the editor without
+// anything changing here until they actually publish (or a scheduled
+// advisory auto-publishes). This is the same rule
+// buildClassifiedCalloutText already follows for the discussion text (see
+// editor/src/discussionText.js); this extends it to everything else.
+// Pre-classification data (formation probabilities, the live discussion
+// text) stays live -- matches NHC's own live-updating Tropical Weather
+// Outlook text, and there's no advisory concept before classification.
+function publicViewFor(system) {
+  if (!system.classified) return { system, points: trackPointsFor(system) };
+  const advisory = latestAdvisoryFor(system.id);
+  if (advisory) {
+    const snapSystem = advisory.snapshot.system;
+    return { system: snapSystem, points: mapTrackPoints(advisory.snapshot.forecastPoints, snapSystem) };
+  }
+  // Classified but nothing has ever been published for it -- keep its
+  // identity and live position (not sensitive forecast data, and there's
+  // no prior official position to freeze on instead) but strip every
+  // intensity field, so systemColor() falls back to its probability-tier
+  // color instead of guessing a category from still-unpublished numbers.
+  return {
+    system: {
+      ...system,
+      windMph: null, gustMph: null, pressureMb: null, galeRadiusMi: null,
+      galeRadiusNeMi: null, galeRadiusSeMi: null, galeRadiusSwMi: null, galeRadiusNwMi: null,
+      hurricaneForceRadiusNeMi: null, hurricaneForceRadiusSeMi: null, hurricaneForceRadiusSwMi: null, hurricaneForceRadiusNwMi: null,
+    },
+    points: [],
+  };
 }
 
 // Mirrors editor/src/main.js's visibleAnnotations() -- a classified
@@ -298,7 +343,7 @@ function coneObstacleRect(trackPoints, bounds, width, height) {
 // exact same text builders -- shown here too since a forecaster's
 // discussion (and, once classified, the advisory text) is public
 // information, same as everything else already on this page.
-function renderDiscussionCallout(selected, bounds, rect) {
+function renderDiscussionCallout(selected, selectedView, bounds, rect) {
   if (!selected) {
     discussionCalloutEl.hidden = true;
     return;
@@ -311,7 +356,7 @@ function renderDiscussionCallout(selected, bounds, rect) {
 
   const { x, y } = projectLonLat(selected.lon, selected.lat, bounds, rect.width, rect.height);
   const obstacles = collectObstacleRects(rect);
-  const cone = coneObstacleRect(trackPointsFor(selected), bounds, rect.width, rect.height);
+  const cone = coneObstacleRect(selectedView.points, bounds, rect.width, rect.height);
   if (cone) obstacles.push(cone);
   const { left, top } = placeCallout({
     markerX: x, markerY: y,
@@ -329,13 +374,19 @@ function renderMap() {
   if (rect.width === 0 || rect.height === 0) return;
   const bounds = currentBounds();
   const selected = systems.find((s) => s.id === selectedId) ?? null;
+  const selectedView = selected ? publicViewFor(selected) : null;
+  // Systems as the public map should actually show them -- a classified
+  // one swapped for its latest published advisory's snapshot (or
+  // intensity-stripped if none exists yet). Shared by the marker layer and
+  // the live-pulse ring so their colors never disagree with each other.
+  const publicSystems = systems.map((s) => publicViewFor(s).system);
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
-  trackConeRenderer.render({ points: trackPointsFor(selected), selectedForecastPointId: null, bounds, width: rect.width, height: rect.height });
-  windFieldRenderer.render({ system: selected, activeThreshold: null, bounds, width: rect.width, height: rect.height });
-  renderDiscussionCallout(selected, bounds, rect);
+  trackConeRenderer.render({ points: selectedView ? selectedView.points : [], selectedForecastPointId: null, bounds, width: rect.width, height: rect.height });
+  windFieldRenderer.render({ system: selectedView ? selectedView.system : null, activeThreshold: null, bounds, width: rect.width, height: rect.height });
+  renderDiscussionCallout(selected, selectedView, bounds, rect);
   annotationRenderer.render({ annotations: visibleAnnotations(), selectedAnnotationId: null, draft: null, systems, bounds, width: rect.width, height: rect.height });
-  livePulseRenderer.render({ systems, bounds, width: rect.width, height: rect.height });
-  pointRenderer.render({ systems, selectedId, bounds, width: rect.width, height: rect.height });
+  livePulseRenderer.render({ systems: publicSystems, bounds, width: rect.width, height: rect.height });
+  pointRenderer.render({ systems: publicSystems, selectedId, bounds, width: rect.width, height: rect.height });
 }
 
 function setView(next) {
@@ -359,13 +410,14 @@ function infoRow(label, value) {
 // No intensity/category information is shown at all until a system is
 // Classified -- only its formation probabilities -- matching the public
 // page's core rule ("no intensity scale until its active").
-function buildCardDetail(system) {
+function buildCardDetail(system, view) {
   const wrap = document.createElement('div');
   wrap.className = 'system-card__detail';
 
+  const metaSource = system.classified ? view.system : system;
   const meta = document.createElement('p');
   meta.className = 'system-card__meta';
-  const metaParts = [`${system.seasonLabel} season`, `${system.lat.toFixed(1)}°N, ${Math.abs(system.lon).toFixed(1)}°W`];
+  const metaParts = [`${system.seasonLabel} season`, `${metaSource.lat.toFixed(1)}°N, ${Math.abs(metaSource.lon).toFixed(1)}°W`];
   if (!system.classified) metaParts.push(system.stage === 'invest' ? 'Invest' : 'Disturbance');
   meta.textContent = metaParts.join(' · ');
   wrap.append(meta);
@@ -380,11 +432,12 @@ function buildCardDetail(system) {
     return wrap;
   }
 
-  wrap.append(infoRow('Sustained wind', system.windMph != null ? `${system.windMph} mph` : '—'));
-  wrap.append(infoRow('Max gust', system.gustMph != null ? `${system.gustMph} mph` : '—'));
-  wrap.append(infoRow('Central pressure', system.pressureMb != null ? `${system.pressureMb} mb` : '—'));
+  const pub = view.system;
+  wrap.append(infoRow('Sustained wind', pub.windMph != null ? `${pub.windMph} mph` : '—'));
+  wrap.append(infoRow('Max gust', pub.gustMph != null ? `${pub.gustMph} mph` : '—'));
+  wrap.append(infoRow('Central pressure', pub.pressureMb != null ? `${pub.pressureMb} mb` : '—'));
 
-  const forecastOnly = trackPointsFor(system).filter((p) => p.hour > 0);
+  const forecastOnly = view.points.filter((p) => p.hour > 0);
   if (forecastOnly.length) {
     const heading = document.createElement('h4');
     heading.className = 'system-card__subheading';
@@ -401,18 +454,20 @@ function buildCardDetail(system) {
   }
 
   const advisory = latestAdvisoryFor(system.id);
-  if (advisory) wrap.append(infoRow('Latest advisory', new Date(advisory.issuedAt).toLocaleString()));
+  wrap.append(advisory
+    ? infoRow('Latest advisory', new Date(advisory.issuedAt).toLocaleString())
+    : infoRow('Status', 'No advisory published yet.'));
 
   return wrap;
 }
 
-function cardTag(system) {
+function cardTag(system, pub) {
   const tag = document.createElement('span');
   tag.className = 'system-card__tag';
   if (system.classified) {
-    const key = intensityCategoryKey(intensityScore(system));
+    const key = intensityCategoryKey(intensityScore(pub));
     tag.textContent = CATEGORY_INFO[key]?.label ?? 'Classified';
-    tag.style.background = CATEGORY_INFO[key]?.color ?? systemColor(system);
+    tag.style.background = CATEGORY_INFO[key]?.color ?? systemColor(pub);
   } else {
     const maxPct = maxFormationProbabilityPct(system);
     tag.textContent = maxPct != null ? `${maxPct}% chance` : 'Monitoring';
@@ -430,20 +485,21 @@ function renderSystemList() {
     card.className = `system-card${system.id === selectedId ? ' is-selected' : ''}`;
     card.dataset.systemId = system.id;
 
+    const view = publicViewFor(system);
     const summary = document.createElement('button');
     summary.type = 'button';
     summary.className = 'system-card__summary';
     const dot = document.createElement('span');
     dot.className = 'system-card__dot';
-    dot.style.background = systemColor(system);
+    dot.style.background = systemColor(view.system);
     const name = document.createElement('span');
     name.className = 'system-card__name';
     name.textContent = displayLabel(system);
-    summary.append(dot, name, cardTag(system));
+    summary.append(dot, name, cardTag(system, view.system));
     summary.addEventListener('click', () => select(selectedId === system.id ? null : system.id));
     card.append(summary);
 
-    if (system.id === selectedId) card.append(buildCardDetail(system));
+    if (system.id === selectedId) card.append(buildCardDetail(system, view));
     systemListEl.append(card);
   }
 }
@@ -547,15 +603,16 @@ function renderLiveStatusBar() {
   const activeCount = systems.length;
   const investCount = systems.filter((s) => s.stage === 'invest').length;
 
+  const publicSystems = systems.map((s) => publicViewFor(s).system);
   let highestCategoryKey = null;
-  for (const s of systems) {
+  for (const s of publicSystems) {
     if (!s.classified) continue;
     const key = intensityCategoryKey(intensityScore(s));
     if (key && (!highestCategoryKey || CATEGORY_ORDER.indexOf(key) > CATEGORY_ORDER.indexOf(highestCategoryKey))) {
       highestCategoryKey = key;
     }
   }
-  const peakWind = systems.reduce((max, s) => (s.windMph != null && s.windMph > max ? s.windMph : max), 0);
+  const peakWind = publicSystems.reduce((max, s) => (s.windMph != null && s.windMph > max ? s.windMph : max), 0);
 
   const parts = [
     `${activeCount} active`,
