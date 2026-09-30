@@ -14,7 +14,7 @@ import { fitBoundsToAspect } from '../editor/src/geo.js';
 import { createMapRenderer } from '../editor/src/mapRenderer.js';
 import { createTrackHistoryRenderer } from './trackHistoryRenderer.js';
 import { createWindHistoryRenderer } from './windHistoryRenderer.js';
-import { formatPosition, computeMovement, computeMinPressure } from './stormStats.js';
+import { formatPosition, computeMinPressure } from './stormStats.js';
 
 const CATEGORY_ORDER = ['ed', 'ets', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5'];
 
@@ -428,11 +428,6 @@ function panelRow(label, value) {
   return row;
 }
 
-function formatMovement(movement) {
-  if (!movement) return 'Stationary';
-  return `${movement.compass} ${Math.round(movement.speedMph)} mph`;
-}
-
 function formatCountdown(targetMs) {
   const deltaMs = targetMs - Date.now();
   if (deltaMs <= 0) return 'Overdue';
@@ -491,7 +486,6 @@ function renderStormPanel(system) {
   const rows = document.createElement('div');
   rows.className = 'storm-panel__rows';
   rows.append(panelRow('Position', formatPosition(latest.lat, latest.lon)));
-  rows.append(panelRow('Movement', formatMovement(computeMovement(entries))));
 
   if (system.classified) {
     const categoryKey = intensityCategoryKey(intensityScore(latest));
