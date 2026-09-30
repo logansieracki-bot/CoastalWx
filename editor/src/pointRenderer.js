@@ -16,7 +16,13 @@ function screenUnit(bounds, width, height) {
   return Math.max(lonPerPx, latPerPx);
 }
 
-export function createPointRenderer(svg) {
+// `hideUnformed`: the public page's read-only mental model -- a
+// not-yet-Formed disturbance is a possible area, not a confirmed point, so
+// it shows no marker/label at all there (only its shape, if one was drawn,
+// is visible/selectable -- see annotationRenderer.js). The editor keeps
+// showing every marker regardless of Formed, since the forecaster still
+// needs to see and reposition it themselves.
+export function createPointRenderer(svg, { hideUnformed = false } = {}) {
   const layer = el('g', { id: 'system-point-layer' });
   svg.append(layer);
 
@@ -29,6 +35,7 @@ export function createPointRenderer(svg) {
     const labelDy = unit * 20;
 
     for (const system of systems) {
+      if (hideUnformed && !system.formed) continue;
       const isSelected = system.id === selectedId;
       const color = systemColor(system);
 

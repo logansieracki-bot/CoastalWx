@@ -189,12 +189,16 @@ systemsRouter.patch('/systems/:id', requireRole(...ROLES), (req, res) => {
   const row = db.prepare('SELECT * FROM systems WHERE id = ?').get(req.params.id);
   const api = toApi(row);
 
-  // Every time a system actually moves -- any stage, not just once it's
-  // classified and advisories exist -- log a full snapshot. This is the
-  // only thing that lets an Invest (or a plain Disturbance) build up a
-  // real track/wind history over time instead of the ongoing-analysis
-  // page only ever having its current live position to show.
-  if (Object.prototype.hasOwnProperty.call(body, 'lat') || Object.prototype.hasOwnProperty.call(body, 'lon')) {
+  // Every time a system actually moves -- any stage once Formed, not just
+  // once it's classified and advisories exist -- log a full snapshot. This
+  // is what lets an Invest (or a Formed-but-not-yet-Invest Disturbance)
+  // build up a real track/wind history over time instead of the
+  // ongoing-analysis page only ever having its current live position to
+  // show. A not-yet-Formed disturbance has no confirmed position worth
+  // tracking -- it's a possible area, not a point -- so it's excluded here
+  // even though its row still carries a lat/lon internally (needed to
+  // anchor any shape drawn for it).
+  if (api.formed && (Object.prototype.hasOwnProperty.call(body, 'lat') || Object.prototype.hasOwnProperty.call(body, 'lon'))) {
     db.prepare('INSERT INTO system_position_log (id, system_id, snapshot_json, recorded_at) VALUES (?, ?, ?, ?)')
       .run(randomUUID(), req.params.id, JSON.stringify(api), now);
   }

@@ -576,9 +576,23 @@ function select(systemId, { scroll = false } = {}) {
   }
 }
 
+// Tracks whether the pointer moved enough between down and up to count as a
+// pan drag (navigation.js's own gesture) rather than a plain click -- same
+// 4px threshold and shape as editor/src/main.js's blank-space click check.
+// Without this, releasing a pan drag over open water would fire a click
+// there and immediately deselect whatever was selected.
+let clickDownX = null;
+let clickDownY = null;
+svg.addEventListener('pointerdown', (event) => {
+  clickDownX = event.clientX;
+  clickDownY = event.clientY;
+});
 svg.addEventListener('click', (event) => {
   const hit = event.target.closest?.('[data-system-id]');
-  if (hit) select(hit.dataset.systemId, { scroll: true });
+  if (hit) { select(hit.dataset.systemId, { scroll: true }); return; }
+  const dist = clickDownX == null ? 0 : Math.hypot(event.clientX - clickDownX, event.clientY - clickDownY);
+  if (dist > 4) return;
+  select(null);
 });
 
 async function refresh() {
@@ -599,7 +613,7 @@ async function init() {
   trackConeRenderer = createTrackConeRenderer(svg);
   annotationRenderer = createAnnotationRenderer(svg);
   livePulseRenderer = createLivePulseRenderer(svg);
-  pointRenderer = createPointRenderer(svg);
+  pointRenderer = createPointRenderer(svg, { hideUnformed: true });
 
   attachNavigation({
     svg,

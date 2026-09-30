@@ -193,7 +193,7 @@ button:disabled:hover { border-color: var(--ui-border); }
 .lake { fill: var(--water-color); stroke: var(--coast-stroke); stroke-width: 0.9px; vector-effect: non-scaling-stroke; }
 .country-borders { fill: none; stroke: var(--border-stroke); stroke-width: 1.1px; vector-effect: non-scaling-stroke; }
 .state-borders { fill: none; stroke: var(--state-stroke); stroke-width: 1.2px; vector-effect: non-scaling-stroke; }
-.grid-line { stroke: var(--grid-stroke); stroke-width: 0.7px; vector-effect: non-scaling-stroke; }
+.grid-line { stroke: var(--grid-stroke); stroke-width: 0.7px; vector-effect: non-scaling-stroke; pointer-events: none; }
 .grid-label { fill: rgba(20, 35, 55, 0.55); font-family: inherit; }
 
 .point-x-outline { stroke: #000; stroke-width: 7px; stroke-linecap: round; vector-effect: non-scaling-stroke; cursor: pointer; }

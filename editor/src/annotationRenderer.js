@@ -123,7 +123,14 @@ export function createAnnotationRenderer(svg) {
       const color = owner ? systemColor(owner) : PROBABILITY_COLORS.none;
       appendFill(fillLayer, {
         points: ann.points, type: ann.type, cssPrefix: 'annotation', unit, color,
-        dataAttrs: { 'data-annotation-id': ann.id },
+        // data-system-id (alongside data-annotation-id) is what lets the
+        // public page's click handler select the owning system straight
+        // off a shape/arrow -- the only clickable representation a
+        // not-yet-Formed disturbance has there, per pointRenderer.js's
+        // hideUnformed. The editor's own gesture handling still checks
+        // data-annotation-id first, so this is a no-op for its own
+        // drag/select-the-annotation behavior.
+        dataAttrs: { 'data-annotation-id': ann.id, 'data-system-id': ann.systemId },
       });
       if (ann.id !== selectedAnnotationId) continue; // fill above always renders; only handles are gated
       appendHandles(handleLayer, { id: ann.id, points: ann.points, unit, color });
