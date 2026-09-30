@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { requireRole } from './auth.js';
-import { toApi as systemToApi } from './systems.js';
+import { toApi as systemToApi, applySystemFields } from './systems.js';
 import { toApi as forecastPointToApi } from './forecastPoints.js';
 
 const CANCEL_WINDOW_MS = 60 * 60 * 1000; // 1 hour, matching the plan's emergency-cancel window
@@ -43,8 +43,17 @@ advisoriesRouter.get('/advisories', (req, res) => {
 // The actual publish logic, shared by the immediate route below and
 // scheduledAdvisoryRunner.js -- a scheduled advisory calls this at the
 // moment it actually fires, so it snapshots the system's real state then,
-// not whatever it was when the forecaster first scheduled it.
-export function publishAdvisory(system, { headline, discussion, issuedByUserId }) {
+// not whatever it was when the forecaster first scheduled it. `fields` is
+// the forecaster's drafted pressure/wind/gust/formation-probability
+// values (see ADVISORY_SETTABLE_FIELDS in systems.js) -- applying them
+// here, right before snapshotting, is what makes publishing (immediate or
+// scheduled) the *only* way that data ever reaches the live system record.
+export function publishAdvisory(system, { headline, discussion, issuedByUserId, fields }) {
+  if (fields && Object.keys(fields).length) {
+    applySystemFields(system.id, fields);
+    system = db.prepare('SELECT * FROM systems WHERE id = ?').get(system.id);
+  }
+
   // The immutable historical record: the system's full current data plus
   // its whole forecast track, as one JSON blob -- stays true to what was
   // known at publish time even as the live system keeps changing after.
@@ -67,7 +76,9 @@ advisoriesRouter.post('/systems/:systemId/advisories', requireRole('owner', 'adm
   if (!system) return res.status(404).json({ error: 'system not found' });
 
   const { headline, discussion } = req.body ?? {};
-  res.status(201).json(publishAdvisory(system, { headline, discussion, issuedByUserId: req.user.id }));
+  // Passing the whole body through as `fields` is safe -- applySystemFields
+  // only ever looks at its own narrow allowlist, ignoring everything else.
+  res.status(201).json(publishAdvisory(system, { headline, discussion, issuedByUserId: req.user.id, fields: req.body ?? {} }));
 });
 
 // Emergency cancel -- a full hard delete, not a retraction marker, and

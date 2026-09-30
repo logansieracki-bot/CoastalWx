@@ -76,20 +76,28 @@ function forecasterLine(displayName, localOnly) {
 }
 
 // Pre-classification format (Disturbance/Invest): name, free-text
-// discussion, the three formation-probability windows, then a byline.
-export function buildDisturbanceCalloutText(system, localOnly) {
+// discussion, the three formation-probability windows, then a byline --
+// all sourced from the latest published advisory's frozen snapshot, same
+// rule buildClassifiedCalloutText below already follows, since this is
+// the only way any of this data is ever set (see systems.js's
+// ADVISORY_SETTABLE_FIELDS and advisories.js's publishAdvisory).
+export function buildDisturbanceCalloutText(system, advisory, localOnly) {
+  if (!advisory) {
+    return `${system.displayName}\n\n(No advisory published yet.)`;
+  }
+  const snapSystem = advisory.snapshot.system;
   const lines = [
-    system.displayName,
+    snapSystem.displayName,
     '',
     'Discussion',
     '',
-    system.discussion?.trim() || '(No discussion yet.)',
+    advisory.discussion?.trim() || '(No discussion text.)',
     '',
-    `Chance of Extratropical development over the next 2 days...${fmtPct(system.formationProbability2dayPct)}`,
-    `Chance of Extratropical development over the next 5 days...${fmtPct(system.formationProbability5dayPct)}`,
-    `Chance of Extratropical development over the next 10 days...${fmtPct(system.formationProbability10dayPct)}`,
+    `Chance of Extratropical development over the next 2 days...${fmtPct(snapSystem.formationProbability2dayPct)}`,
+    `Chance of Extratropical development over the next 5 days...${fmtPct(snapSystem.formationProbability5dayPct)}`,
+    `Chance of Extratropical development over the next 10 days...${fmtPct(snapSystem.formationProbability10dayPct)}`,
   ];
-  const fLine = forecasterLine(system.discussionByDisplayName, localOnly);
+  const fLine = forecasterLine(advisory.issuedByDisplayName, localOnly);
   if (fLine) lines.push('', fLine);
   return lines.join('\n');
 }

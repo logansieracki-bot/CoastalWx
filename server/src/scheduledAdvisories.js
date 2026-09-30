@@ -2,11 +2,23 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { requireRole, ROLES } from './auth.js';
+import { ADVISORY_SETTABLE_FIELDS } from './systems.js';
 
 function displayNameForUserId(userId) {
   if (!userId) return null;
   const row = db.prepare('SELECT display_name FROM users WHERE id = ?').get(userId);
   return row ? row.display_name : null;
+}
+
+// Picks out only the advisory-settable subset of a request body (same
+// allowlist applySystemFields itself uses) to store as this row's staged
+// draft -- so an arbitrary request body can never smuggle other fields in.
+function extractPendingFields(body) {
+  const out = {};
+  for (const apiKey of Object.keys(ADVISORY_SETTABLE_FIELDS)) {
+    if (Object.prototype.hasOwnProperty.call(body ?? {}, apiKey)) out[apiKey] = body[apiKey];
+  }
+  return out;
 }
 
 function toApi(row) {
@@ -15,6 +27,7 @@ function toApi(row) {
     systemId: row.system_id,
     headline: row.headline,
     discussion: row.discussion,
+    pendingFields: row.pending_fields_json ? JSON.parse(row.pending_fields_json) : {},
     scheduledFor: row.scheduled_for,
     createdAt: row.created_at,
     createdByUserId: row.created_by_user_id,
@@ -42,12 +55,13 @@ scheduledAdvisoriesRouter.post('/systems/:systemId/scheduled-advisories', requir
   if (!Number.isFinite(scheduledMs)) return res.status(400).json({ error: 'scheduledFor must be a valid date/time' });
   if (scheduledMs <= Date.now()) return res.status(400).json({ error: 'scheduledFor must be in the future' });
 
+  const pendingFieldsJson = JSON.stringify(extractPendingFields(req.body));
   const id = randomUUID();
   const now = new Date().toISOString();
   db.prepare(`
-    INSERT INTO scheduled_advisories (id, system_id, headline, discussion, scheduled_for, created_at, created_by_user_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(id, req.params.systemId, headline ?? null, discussion ?? null, new Date(scheduledMs).toISOString(), now, req.user.id);
+    INSERT INTO scheduled_advisories (id, system_id, headline, discussion, pending_fields_json, scheduled_for, created_at, created_by_user_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, req.params.systemId, headline ?? null, discussion ?? null, pendingFieldsJson, new Date(scheduledMs).toISOString(), now, req.user.id);
 
   res.status(201).json(toApi(db.prepare('SELECT * FROM scheduled_advisories WHERE id = ?').get(id)));
 });

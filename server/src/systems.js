@@ -31,12 +31,6 @@ function averageRadius(ne, se, sw, nw) {
   return quadrants.reduce((sum, v) => sum + (v ?? 0), 0) / 4;
 }
 
-function displayNameForUserId(userId) {
-  if (!userId) return null;
-  const row = db.prepare('SELECT display_name FROM users WHERE id = ?').get(userId);
-  return row ? row.display_name : null;
-}
-
 export function toApi(row) {
   return {
     id: row.id,
@@ -63,9 +57,6 @@ export function toApi(row) {
     hurricaneForceRadiusSwMi: row.hurricane_force_radius_sw_mi,
     hurricaneForceRadiusNwMi: row.hurricane_force_radius_nw_mi,
     galeRadiusMi: averageRadius(row.gale_radius_ne_mi, row.gale_radius_se_mi, row.gale_radius_sw_mi, row.gale_radius_nw_mi),
-    discussion: row.discussion,
-    discussionByUserId: row.discussion_by_user_id,
-    discussionByDisplayName: displayNameForUserId(row.discussion_by_user_id),
     formed: !!row.formed,
     classified: !!row.classified,
     forecastInterval: row.forecast_interval,
@@ -87,8 +78,12 @@ systemsRouter.get('/systems/:id', (req, res) => {
   res.json(toApi(row));
 });
 
+// Formation probabilities/pressure/wind/gust are never set at creation --
+// like every other advisory-settable field (see ADVISORY_SETTABLE_FIELDS
+// below), a brand-new system starts with all of them null and only ever
+// gets them from a published (or auto-published) advisory.
 systemsRouter.post('/systems', requireRole(...ROLES), (req, res) => {
-  const { lat, lon, formationProbability2dayPct, formationProbability5dayPct, formationProbability10dayPct } = req.body ?? {};
+  const { lat, lon } = req.body ?? {};
   if (typeof lat !== 'number' || typeof lon !== 'number') {
     return res.status(400).json({ error: 'lat and lon are required numbers' });
   }
@@ -98,24 +93,24 @@ systemsRouter.post('/systems', requireRole(...ROLES), (req, res) => {
   const now = new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO systems (id, season, sequence_number, lat, lon, formation_probability_2day_pct, formation_probability_5day_pct, formation_probability_10day_pct, formed, classified, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
-  `).run(id, season, sequenceNumber, lat, lon, formationProbability2dayPct ?? null, formationProbability5dayPct ?? null, formationProbability10dayPct ?? null, now, now);
+    INSERT INTO systems (id, season, sequence_number, lat, lon, formed, classified, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)
+  `).run(id, season, sequenceNumber, lat, lon, now, now);
 
   const row = db.prepare('SELECT * FROM systems WHERE id = ?').get(id);
   res.status(201).json(toApi(row));
 });
 
+// Formation probabilities, pressure, wind, and gust are deliberately absent
+// here -- a forecaster can freely edit/save everything else below live, but
+// these are only ever written by applySystemFields (below), which only
+// publishAdvisory calls, so nothing public-facing ever shows them until an
+// advisory (immediate or scheduled) actually publishes. discussion is
+// absent for the same reason, now entirely superseded by advisories.discussion.
 const PATCHABLE_FIELDS = {
   lat: 'lat',
   lon: 'lon',
   stage: 'stage',
-  formationProbability2dayPct: 'formation_probability_2day_pct',
-  formationProbability5dayPct: 'formation_probability_5day_pct',
-  formationProbability10dayPct: 'formation_probability_10day_pct',
-  pressureMb: 'pressure_mb',
-  windMph: 'wind_mph',
-  gustMph: 'gust_mph',
   galeRadiusNeMi: 'gale_radius_ne_mi',
   galeRadiusSeMi: 'gale_radius_se_mi',
   galeRadiusSwMi: 'gale_radius_sw_mi',
@@ -128,17 +123,51 @@ const PATCHABLE_FIELDS = {
   classified: 'classified',
   name: 'name',
   forecastInterval: 'forecast_interval',
-  discussion: 'discussion',
 };
+
+// The only fields an advisory (immediate Publish or a fired Plan to
+// Publish) is ever allowed to carry from its draft form into the live
+// system record -- deliberately narrow (no lat/lon, stage, classified,
+// formed, or name) so the advisory endpoints can never be used as a
+// side-channel around PATCHABLE_FIELDS's role gating above.
+export const ADVISORY_SETTABLE_FIELDS = {
+  formationProbability2dayPct: 'formation_probability_2day_pct',
+  formationProbability5dayPct: 'formation_probability_5day_pct',
+  formationProbability10dayPct: 'formation_probability_10day_pct',
+  pressureMb: 'pressure_mb',
+  windMph: 'wind_mph',
+  gustMph: 'gust_mph',
+};
+
+// Applies only the advisory-owned fields to a system row -- the one place
+// they're ever written, called at the moment an advisory actually
+// publishes (see advisories.js's publishAdvisory), immediate or scheduled
+// alike. Any other key in `fields` (even a whole raw request body) is
+// silently ignored, so callers don't need to pre-filter it themselves.
+export function applySystemFields(id, fields) {
+  const updates = [];
+  const values = [];
+  for (const [apiKey, column] of Object.entries(ADVISORY_SETTABLE_FIELDS)) {
+    if (Object.prototype.hasOwnProperty.call(fields ?? {}, apiKey)) {
+      updates.push(`${column} = ?`);
+      values.push(fields[apiKey]);
+    }
+  }
+  if (updates.length === 0) return;
+  updates.push('updated_at = ?');
+  values.push(new Date().toISOString());
+  values.push(id);
+  db.prepare(`UPDATE systems SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+}
 
 systemsRouter.patch('/systems/:id', requireRole(...ROLES), (req, res) => {
   const existing = db.prepare('SELECT * FROM systems WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'not_found' });
 
-  // This one route covers both routine data entry (wind/pressure/
-  // probabilities/wind field, open to all 4 roles) and the two bigger
-  // lifecycle decisions -- Investigate (stage -> invest) and Classify
-  // (classified -> true) -- which a Junior Forecaster can't trigger.
+  // This one route covers both routine data entry (wind field/gale radii,
+  // open to all 4 roles) and the two bigger lifecycle decisions --
+  // Investigate (stage -> invest) and Classify (classified -> true) --
+  // which a Junior Forecaster can't trigger.
   const body = req.body ?? {};
   const becomingClassified = Object.prototype.hasOwnProperty.call(body, 'classified') && body.classified && !existing.classified;
   const triggersBigDecision =
@@ -156,13 +185,6 @@ systemsRouter.patch('/systems/:id', requireRole(...ROLES), (req, res) => {
       updates.push(`${column} = ?`);
       values.push(value);
     }
-  }
-  // The discussion's byline always comes from the authenticated session,
-  // never a client-supplied user id -- otherwise any writer could sign the
-  // discussion as someone else.
-  if (Object.prototype.hasOwnProperty.call(body, 'discussion')) {
-    updates.push('discussion_by_user_id = ?');
-    values.push(req.user.id);
   }
 
   if (updates.length === 0) return res.status(400).json({ error: 'no updatable fields provided' });

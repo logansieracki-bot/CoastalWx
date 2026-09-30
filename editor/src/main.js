@@ -214,7 +214,7 @@ function renderDiscussionCallout() {
 
   discussionCalloutEl.textContent = system.classified
     ? buildClassifiedCalloutText(system, latestAdvisoryFor(system.id), api.isLocalOnly())
-    : buildDisturbanceCalloutText(system, api.isLocalOnly());
+    : buildDisturbanceCalloutText(system, latestAdvisoryFor(system.id), api.isLocalOnly());
   discussionCalloutEl.hidden = false;
 
   const bounds = currentBounds();
@@ -736,6 +736,59 @@ function renderAdvisoriesSection(system) {
   const localOnly = api.isLocalOnly();
   const canPublish = !localOnly && hasRole(currentUser, 'forecaster');
 
+  // Formation probabilities, pressure, wind, and gust are drafted here and
+  // only ever take effect on the live system record at the moment this
+  // advisory actually publishes (see server/src/advisories.js's
+  // publishAdvisory) -- there is no separate "Save" for them anymore, so a
+  // forecaster can freely edit/cancel without anything public changing
+  // until they actually click Publish or Plan to Publish. Prefilled from
+  // the system's current officially-published values as the starting
+  // point for drafting the next advisory.
+  function probabilityInput(value) {
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.max = '100';
+    input.value = value ?? '';
+    input.placeholder = '0-100';
+    input.disabled = !canPublish;
+    return input;
+  }
+
+  const prob2Input = probabilityInput(system.formationProbability2dayPct);
+  const prob5Input = probabilityInput(system.formationProbability5dayPct);
+  const prob10Input = probabilityInput(system.formationProbability10dayPct);
+
+  const pressureInput = document.createElement('input');
+  pressureInput.type = 'number';
+  pressureInput.step = '0.1';
+  pressureInput.value = system.pressureMb ?? '';
+  pressureInput.placeholder = 'mb';
+  pressureInput.disabled = !canPublish;
+
+  const windInput = document.createElement('input');
+  windInput.type = 'number';
+  windInput.step = '1';
+  windInput.value = system.windMph ?? '';
+  windInput.placeholder = 'mph';
+  windInput.disabled = !canPublish;
+
+  const gustInput = document.createElement('input');
+  gustInput.type = 'number';
+  gustInput.step = '1';
+  gustInput.value = system.gustMph ?? '';
+  gustInput.placeholder = 'mph';
+  gustInput.disabled = !canPublish;
+
+  wrap.append(
+    field('2-day formation probability (%)', prob2Input),
+    field('5-day formation probability (%)', prob5Input),
+    field('10-day formation probability (%)', prob10Input),
+    field('Central pressure (mb)', pressureInput),
+    field('Sustained wind (mph)', windInput),
+    field('Max gust (mph)', gustInput)
+  );
+
   const discussionTextarea = document.createElement('textarea');
   discussionTextarea.rows = 4;
   discussionTextarea.placeholder = 'Discussion for this advisory (reasoning, trends, confidence)...';
@@ -753,6 +806,20 @@ function renderAdvisoriesSection(system) {
   scheduledForInput.min = new Date(minWhen - minWhen.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   wrap.append(field('Scheduled for (Plan to Publish only)', scheduledForInput));
 
+  // The drafted fields above, read at the moment Publish/Plan to Publish
+  // is actually clicked -- shared by both buttons below since it's the
+  // exact same payload either way, just immediate vs. held for later.
+  function draftFields() {
+    return {
+      formationProbability2dayPct: prob2Input.value === '' ? null : Number(prob2Input.value),
+      formationProbability5dayPct: prob5Input.value === '' ? null : Number(prob5Input.value),
+      formationProbability10dayPct: prob10Input.value === '' ? null : Number(prob10Input.value),
+      pressureMb: pressureInput.value === '' ? null : Number(pressureInput.value),
+      windMph: windInput.value === '' ? null : Number(windInput.value),
+      gustMph: gustInput.value === '' ? null : Number(gustInput.value),
+    };
+  }
+
   const actions = document.createElement('div');
   actions.className = 'selected-actions';
 
@@ -763,8 +830,12 @@ function renderAdvisoriesSection(system) {
   publishBtn.title = localOnly ? 'Advisories require the real hosted backend -- not available in local-only mode' : (canPublish ? '' : 'Requires Forecaster role or higher');
   publishBtn.addEventListener('click', async () => {
     if (!confirm(`Publish advisory #${own.length + 1} for ${displayLabel(system)}? This creates a permanent record of its current data${system.classified ? ' and forecast track' : ''}.`)) return;
-    const created = await api.createAdvisory(system.id, { discussion: discussionTextarea.value.trim() || null });
+    const created = await api.createAdvisory(system.id, { discussion: discussionTextarea.value.trim() || null, ...draftFields() });
     advisories = [...advisories, created];
+    // The advisory's own snapshot is exactly the system's post-publish live
+    // row (applySystemFields ran server-side right before it was taken) --
+    // reuse it instead of a second round-trip to re-fetch the system.
+    systems = systems.map((s) => (s.id === created.snapshot.system.id ? created.snapshot.system : s));
     renderSidebar();
     renderMap(); // the on-map discussion callout reads `advisories` too
   });
@@ -782,6 +853,7 @@ function renderAdvisoriesSection(system) {
     const created = await api.createScheduledAdvisory(system.id, {
       discussion: discussionTextarea.value.trim() || null,
       scheduledFor: when.toISOString(),
+      ...draftFields(),
     });
     scheduledAdvisories = [...scheduledAdvisories, created];
     scheduledForInput.value = '';
@@ -882,12 +954,13 @@ function renderWindFieldToggle(system) {
   return wrap;
 }
 
-// Live intensity score/category, computed from the form's current (maybe
-// unsaved) wind/gust/pressure values plus the system's saved gale radius
-// -- this is the "calculator": it updates as you type/drag, before Save is
-// ever clicked for wind/gust/pressure. Classify itself still acts on the
-// saved system record, same as Investigate/Delete.
-function renderIntensitySection(system, { windInput, gustInput, pressureInput }) {
+// Intensity score/category, computed from the system's current officially
+// published wind/gust/pressure/gale-radius (there's no "unsaved draft" to
+// read anymore -- those fields only ever change at the moment an advisory
+// actually publishes; see renderAdvisoriesSection for where they're
+// drafted). Classify itself acts on this same saved record, same as
+// Investigate/Delete.
+function renderIntensitySection(system) {
   const wrap = document.createElement('div');
   wrap.className = 'annotations-section intensity-section';
   const heading = document.createElement('h4');
@@ -896,30 +969,13 @@ function renderIntensitySection(system, { windInput, gustInput, pressureInput })
 
   const readout = document.createElement('p');
   readout.className = 'intensity-readout';
-  // Gale radius comes from the wind-field drag handles on the map (see
-  // windThresholdMi/windFieldRenderer), which PATCH immediately on
-  // release -- unlike the typed wind/gust/pressure inputs, there's no
-  // unsaved draft value for it, so the readout uses the system's current
-  // saved value rather than a live input.
-  function updateReadout() {
-    const live = {
-      windMph: windInput.value === '' ? null : Number(windInput.value),
-      gustMph: gustInput.value === '' ? null : Number(gustInput.value),
-      galeRadiusMi: system.galeRadiusMi,
-      pressureMb: pressureInput.value === '' ? null : Number(pressureInput.value),
-    };
-    const score = intensityScore(live);
-    if (score == null) {
-      readout.textContent = 'Enter wind, gust, pressure, and a gale wind field to calculate.';
-    } else {
-      const key = intensityCategoryKey(score);
-      readout.textContent = `Score ${score.toFixed(1)} → ${CATEGORY_INFO[key].label}`;
-    }
+  const score = intensityScore(system);
+  if (score == null) {
+    readout.textContent = 'Publish an advisory with wind, gust, pressure, and a gale wind field to calculate.';
+  } else {
+    const key = intensityCategoryKey(score);
+    readout.textContent = `Score ${score.toFixed(1)} → ${CATEGORY_INFO[key].label}`;
   }
-  for (const input of [windInput, gustInput, pressureInput]) {
-    input.addEventListener('input', updateReadout);
-  }
-  updateReadout();
   wrap.append(readout);
 
   const details = document.createElement('details');
@@ -1003,85 +1059,10 @@ function renderSelectedPanel() {
   });
   selectedPanelEl.append(formedBtn);
 
-  function probabilityInput(value) {
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.min = '0';
-    input.max = '100';
-    input.value = value ?? '';
-    input.placeholder = '0-100';
-    return input;
-  }
-
-  const prob2Input = probabilityInput(system.formationProbability2dayPct);
-  const prob5Input = probabilityInput(system.formationProbability5dayPct);
-  const prob10Input = probabilityInput(system.formationProbability10dayPct);
-
-  const pressureInput = document.createElement('input');
-  pressureInput.type = 'number';
-  pressureInput.step = '0.1';
-  pressureInput.value = system.pressureMb ?? '';
-  pressureInput.placeholder = 'mb';
-
-  const windInput = document.createElement('input');
-  windInput.type = 'number';
-  windInput.step = '1';
-  windInput.value = system.windMph ?? '';
-  windInput.placeholder = 'mph';
-
-  const gustInput = document.createElement('input');
-  gustInput.type = 'number';
-  gustInput.step = '1';
-  gustInput.value = system.gustMph ?? '';
-  gustInput.placeholder = 'mph';
-
-  // Live, editable discussion for a disturbance/invest -- shown in the
-  // on-map callout while selected (see discussionCallout.js). Classified
-  // systems use a separate, per-advisory discussion instead (immutable
-  // once published), entered in renderAdvisoriesSection below.
-  let discussionTextarea = null;
-  if (!system.classified) {
-    discussionTextarea = document.createElement('textarea');
-    discussionTextarea.rows = 4;
-    discussionTextarea.placeholder = 'Forecast reasoning, trends, anything worth noting...';
-    discussionTextarea.value = system.discussion ?? '';
-  }
-
-  const form = document.createElement('div');
-  form.className = 'selected-form';
-  form.append(
-    field('2-day formation probability (%)', prob2Input),
-    field('5-day formation probability (%)', prob5Input),
-    field('10-day formation probability (%)', prob10Input),
-    field('Central pressure (mb)', pressureInput),
-    field('Sustained wind (mph)', windInput),
-    field('Max gust (mph)', gustInput)
-  );
-  if (discussionTextarea) form.append(field('Discussion', discussionTextarea));
-  selectedPanelEl.append(form);
-
   selectedPanelEl.append(renderWindFieldToggle(system));
 
   const actions = document.createElement('div');
   actions.className = 'selected-actions';
-
-  const saveBtn = document.createElement('button');
-  saveBtn.textContent = 'Save';
-  saveBtn.className = 'primary';
-  saveBtn.addEventListener('click', async () => {
-    const updated = await api.updateSystem(system.id, {
-      formationProbability2dayPct: prob2Input.value === '' ? null : Number(prob2Input.value),
-      formationProbability5dayPct: prob5Input.value === '' ? null : Number(prob5Input.value),
-      formationProbability10dayPct: prob10Input.value === '' ? null : Number(prob10Input.value),
-      pressureMb: pressureInput.value === '' ? null : Number(pressureInput.value),
-      windMph: windInput.value === '' ? null : Number(windInput.value),
-      gustMph: gustInput.value === '' ? null : Number(gustInput.value),
-      ...(discussionTextarea ? { discussion: discussionTextarea.value.trim() || null } : {}),
-    });
-    systems = systems.map((s) => (s.id === updated.id ? updated : s));
-    renderSidebar();
-    renderMap();
-  });
 
   let investigateBtn = null;
   if (system.stage !== 'invest') {
@@ -1117,12 +1098,11 @@ function renderSelectedPanel() {
     select(null);
   });
 
-  actions.append(saveBtn);
   if (investigateBtn) actions.append(investigateBtn);
   actions.append(deleteBtn);
   selectedPanelEl.append(actions);
 
-  renderIntensitySection(system, { windInput, gustInput, pressureInput });
+  renderIntensitySection(system);
   if (system.classified) {
     renderForecastTrackSection(system);
   } else {
@@ -1140,12 +1120,7 @@ function renderSidebar() {
 }
 
 async function placeDisturbance(geo) {
-  const created = await api.createSystem({
-    lat: geo.lat, lon: geo.lon,
-    formationProbability2dayPct: 0,
-    formationProbability5dayPct: 0,
-    formationProbability10dayPct: 0,
-  });
+  const created = await api.createSystem({ lat: geo.lat, lon: geo.lon });
   systems = [...systems, created];
   setTool('select');
   select(created.id);

@@ -187,9 +187,14 @@ function addColumnIfMissing(table, column, definition) {
   }
 }
 
-// Live, editable forecaster discussion for a disturbance/invest, shown in
-// an on-map callout while selected -- distinct from advisories.discussion
-// above, which is a per-advisory immutable snapshot for classified systems.
+// Retired: was a live, directly-editable forecaster discussion for a
+// disturbance/invest, but that let a forecaster's saved-not-yet-published
+// draft leak straight onto the public page. Superseded by
+// advisories.discussion (a per-advisory immutable snapshot, now used at
+// every stage, not just classified) -- see systems.js's toApi/
+// PATCHABLE_FIELDS, neither of which reference these columns anymore. Left
+// in place rather than dropped (some existing rows may still carry old
+// values) since nothing reads them anymore either way.
 addColumnIfMissing('systems', 'discussion', 'TEXT');
 addColumnIfMissing('systems', 'discussion_by_user_id', 'TEXT REFERENCES users(id)');
 
@@ -198,6 +203,13 @@ addColumnIfMissing('systems', 'discussion_by_user_id', 'TEXT REFERENCES users(id
 // forecastPoints.js, not via a CHECK constraint, to keep this ALTER TABLE
 // simple against existing databases).
 addColumnIfMissing('forecast_points', 'status', 'TEXT');
+
+// The forecaster's drafted pressure/wind/gust/formation-probability
+// values (see systems.js's ADVISORY_SETTABLE_FIELDS), staged as JSON until
+// scheduledAdvisoryRunner.js actually fires this row -- kept separate from
+// headline/discussion (plain columns already above) since it's a flexible
+// subset of system fields rather than its own fixed shape.
+addColumnIfMissing('scheduled_advisories', 'pending_fields_json', 'TEXT');
 
 // Widens forecast_interval's CHECK to also allow 3 (alongside the existing
 // 6/12/24), for NHC-style 3-hourly intermediate advisories/cone spacing

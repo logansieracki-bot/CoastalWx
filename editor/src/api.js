@@ -161,9 +161,6 @@ function toApi(row) {
     hurricaneForceRadiusSwMi: row.hurricaneForceRadiusSwMi ?? null,
     hurricaneForceRadiusNwMi: row.hurricaneForceRadiusNwMi ?? null,
     galeRadiusMi: averageRadius(row.galeRadiusNeMi, row.galeRadiusSeMi, row.galeRadiusSwMi, row.galeRadiusNwMi),
-    discussion: row.discussion ?? null,
-    discussionByUserId: null,
-    discussionByDisplayName: null, // local-only mode has no real accounts to attribute to
     formed: !!row.formed,
     classified: !!row.classified,
     forecastInterval: row.forecastInterval ?? 12,
@@ -176,7 +173,7 @@ const local = {
   async listSystems() {
     return readAll().sort((a, b) => b.season - a.season || a.sequenceNumber - b.sequenceNumber).map(toApi);
   },
-  async createSystem({ lat, lon, formationProbability2dayPct, formationProbability5dayPct, formationProbability10dayPct }) {
+  async createSystem({ lat, lon }) {
     const rows = readAll();
     const season = currentSeason();
     const sequenceNumber = Math.max(0, ...rows.filter((r) => r.season === season).map((r) => r.sequenceNumber)) + 1;
@@ -185,13 +182,10 @@ const local = {
       id: crypto.randomUUID(), season, sequenceNumber, name: null,
       stage: 'disturbance',
       lat, lon,
-      formationProbability2dayPct: formationProbability2dayPct ?? null,
-      formationProbability5dayPct: formationProbability5dayPct ?? null,
-      formationProbability10dayPct: formationProbability10dayPct ?? null,
+      formationProbability2dayPct: null, formationProbability5dayPct: null, formationProbability10dayPct: null,
       pressureMb: null, windMph: null, gustMph: null,
       galeRadiusNeMi: null, galeRadiusSeMi: null, galeRadiusSwMi: null, galeRadiusNwMi: null,
       hurricaneForceRadiusNeMi: null, hurricaneForceRadiusSeMi: null, hurricaneForceRadiusSwMi: null, hurricaneForceRadiusNwMi: null,
-      discussion: null,
       formed: false, classified: false, forecastInterval: 12,
       createdAt: now, updatedAt: now,
     };

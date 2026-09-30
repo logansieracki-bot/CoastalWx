@@ -17,7 +17,8 @@ function runDueScheduledAdvisories() {
     const system = db.prepare('SELECT * FROM systems WHERE id = ?').get(row.system_id);
     db.prepare('DELETE FROM scheduled_advisories WHERE id = ?').run(row.id);
     if (!system) continue;
-    publishAdvisory(system, { headline: row.headline, discussion: row.discussion, issuedByUserId: row.created_by_user_id });
+    const fields = row.pending_fields_json ? JSON.parse(row.pending_fields_json) : undefined;
+    publishAdvisory(system, { headline: row.headline, discussion: row.discussion, issuedByUserId: row.created_by_user_id, fields });
   }
 }
 

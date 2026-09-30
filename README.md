@@ -112,14 +112,14 @@ exception is local-only mode (no backend reachable, e.g. the GitHub Pages
 demo): there's no real account system to sign into there at all, so the
 gate is skipped and the editor works directly, same as it always has.
 
-Disturbances (place, drag, edit 2/5/10-day formation probability, pressure,
-and wind) and per-system shapes/arrows (freeform smoothed shape and arrow
-annotations, each owned by a system, editable vertex-by-vertex, always
-visible when their system isn't selected) are both in place now. A
-Disturbance can be promoted to an Invest (Investigate button, with a
-confirmation), toggled Formed/Not Formed (whether it currently has a
-physically-existing closed circulation), and — once investigated, formed,
-and given wind/gust/gale-radius/pressure readings — Classified as an
+Disturbances (place, drag) and per-system shapes/arrows (freeform smoothed
+shape and arrow annotations, each owned by a system, editable
+vertex-by-vertex, always visible when their system isn't selected) are
+both in place now. A Disturbance can be promoted to an Invest (Investigate
+button, with a confirmation), toggled Formed/Not Formed (whether it
+currently has a physically-existing closed circulation), and — once
+investigated, formed, and given wind/gust/gale-radius/pressure readings
+(via a published advisory; see **Advisories** below) — Classified as an
 extratropical cyclone. Classifying computes an intensity category (from
 Extratropical Depression through the in-between Extratropical Storm tier
 up to Category 5) from a calculated score (not wind speed alone, since
@@ -188,8 +188,9 @@ each a superset of the one below it:
 - **Forecaster** — Investigate/Classify/Delete a system, publish or
   emergency-cancel an advisory, plus everything Junior Forecaster can.
 - **Junior Forecaster** — routine data entry: disturbances, forecast
-  points, wind field, formation probabilities, wind/gust/pressure
-  readings, saving.
+  points, wind field. Formation probabilities, wind/gust/pressure, and
+  discussion text are drafted and committed only through publishing an
+  advisory (see **Advisories**), which requires Forecaster role or higher.
 
 The very first (Owner) account can't be created through the app itself
 (there's nobody logged in yet to create it) — it's provisioned directly
@@ -222,25 +223,31 @@ even if that system later weakens.
 
 ## Advisories
 
-Every system's panel gets a **Publish Advisory** button (Forecaster role
-or higher, confirmation-gated) — at any stage, not just once classified,
-matching how NHC issues text products on disturbances well before
-naming. Publishing snapshots the system's full current data, plus its
-forecast track once it has one, as an immutable, auto-numbered record.
-For exactly one hour after publishing, that advisory shows an emergency
+Every system's panel gets formation-probability, pressure, wind, gust, and
+discussion fields, plus a **Publish Advisory** button (Forecaster role or
+higher, confirmation-gated) — at any stage, not just once classified,
+matching how NHC issues text products on disturbances well before naming.
+These fields are drafts only: editing them changes nothing anywhere else
+in the app (including the public site) until Publish Advisory or Plan to
+Publish actually runs. Publishing applies the drafted values to the
+system's live record, then snapshots its full current data, plus its
+forecast track once it has one, as an immutable, auto-numbered record —
+so nothing a forecaster types ever reaches the public page except through
+an advisory actually going out. For exactly one hour after publishing, that advisory shows an emergency
 **Cancel** button (same role, a second confirmation) that fully and
 permanently deletes it — not a retraction, a true undo. After the hour,
 it's permanent. The one-hour window is enforced by the server itself, not
 just hidden client-side once it passes.
 
 Advisories can also be prepared ahead of time: **Plan to Publish** takes
-the same discussion text plus a date/time, and stores it unpublished until
-then — for a forecaster who won't be at a computer at, say, 6am but wants
-that advisory to go out on schedule anyway. A small server-side job polls
-every 30 seconds for anything due and publishes it automatically,
-snapshotting the system's state at the moment it actually fires (not
-whenever it was originally planned), so it stays true to the same "what
-was known at publish time" rule as a manual publish. A planned advisory
+the same drafted fields and discussion text plus a date/time, and stores
+them unpublished until then — for a forecaster who won't be at a computer
+at, say, 6am but wants that advisory to go out on schedule anyway. A small
+server-side job polls every 30 seconds for anything due, applies the
+drafted fields and publishes automatically, snapshotting the system's
+state at the moment it actually fires (not whenever it was originally
+planned), so it stays true to the same "what was known at publish time"
+rule as a manual publish. A planned advisory
 can be canceled any time before it fires (Forecaster role or higher); once
 it does publish, it's an ordinary advisory, including its own one-hour
 emergency-cancel window.
@@ -251,12 +258,16 @@ Selecting any system opens a text callout right on the map, next to its
 marker, until it's deselected — a plain-language companion to the
 numbers in the sidebar, styled after NHC's own text products:
 
-- **Disturbance/Invest** — a free-text discussion (editable by any of the
-  four roles, saved alongside the rest of that system's routine data)
-  plus its three formation-probability windows and a "Forecaster:" byline
-  naming whoever last saved it.
-- **Classified** — the *latest advisory's* discussion (written at publish
-  time, immutable afterward like the rest of that advisory) under a
+Both stages read from the *latest published advisory* now, not live data
+— editing a draft in the Advisories section changes nothing here until
+that draft is actually published:
+
+- **Disturbance/Invest** — that advisory's discussion (written at publish
+  time, immutable afterward) plus its three formation-probability windows
+  and a "Forecaster:" byline naming whoever published it. Before any
+  advisory has ever been published, this reads "(No advisory published
+  yet.)", same as a classified system with none yet.
+- **Classified** — the *latest advisory's* discussion under a
   "`<name>` Discussion (Advisory `N`)" heading, followed by a
   FORECAST POSITIONS AND MAX WINDS table built from that same advisory's
   frozen snapshot: each position's valid time, lat/lon, and wind in both

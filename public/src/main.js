@@ -87,8 +87,6 @@ const DEMO_SYSTEMS = [
     galeRadiusNeMi: null, galeRadiusSeMi: null, galeRadiusSwMi: null, galeRadiusNwMi: null,
     hurricaneForceRadiusNeMi: null, hurricaneForceRadiusSeMi: null, hurricaneForceRadiusSwMi: null, hurricaneForceRadiusNwMi: null,
     galeRadiusMi: null,
-    discussion: 'Broad, disorganized area of low pressure. Some slow development is possible while it drifts north-northeast over the next several days.',
-    discussionByDisplayName: 'Demo Forecaster',
     formed: false, classified: false, forecastInterval: 12,
   },
 ];
@@ -97,12 +95,22 @@ const DEMO_FORECAST_POINTS = [
   { id: 'demo-fp-2', systemId: 'demo-1', sequence: 2, lon: -64.5, lat: 42, hour: 24, windMph: 60, spreadMi: 70, hourMode: 'auto', hourOverride: null, status: null },
   { id: 'demo-fp-3', systemId: 'demo-1', sequence: 3, lon: -61, lat: 44.5, hour: 36, windMph: 50, spreadMi: 100, hourMode: 'auto', hourOverride: null, status: 'over_water' },
 ];
+// Pre-classification discussion/probabilities are advisory-sourced too now
+// (see buildDisturbanceCalloutText) -- demo-2 needs its own demo advisory
+// or its callout would show the real "(No advisory published yet.)" empty
+// state instead of demoing the feature.
 const DEMO_ADVISORIES = [
   {
     id: 'demo-adv-1', systemId: 'demo-1', number: 3, headline: null,
     discussion: 'Marlowe continues to weaken as it accelerates northeast over open water. No coastal impacts are expected with this system.',
     issuedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), issuedByUserId: 'demo', issuedByDisplayName: 'Demo Forecaster', cancelable: false,
     snapshot: { system: DEMO_SYSTEMS[0], forecastPoints: DEMO_FORECAST_POINTS },
+  },
+  {
+    id: 'demo-adv-2', systemId: 'demo-2', number: 1, headline: null,
+    discussion: 'Broad, disorganized area of low pressure. Some slow development is possible while it drifts north-northeast over the next several days.',
+    issuedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(), issuedByUserId: 'demo', issuedByDisplayName: 'Demo Forecaster', cancelable: false,
+    snapshot: { system: DEMO_SYSTEMS[1], forecastPoints: [] },
   },
 ];
 // A shape + an arrow on the non-classified demo disturbance (marker at
@@ -260,9 +268,14 @@ function latestAdvisoryFor(systemId) {
 // advisory auto-publishes). This is the same rule
 // buildClassifiedCalloutText already follows for the discussion text (see
 // editor/src/discussionText.js); this extends it to everything else.
-// Pre-classification data (formation probabilities, the live discussion
-// text) stays live -- matches NHC's own live-updating Tropical Weather
-// Outlook text, and there's no advisory concept before classification.
+// Pre-classification systems need no such override here: wind/gust/
+// pressure/formation-probabilities/discussion are only ever written to the
+// live system record at the moment an advisory publishes (see systems.js's
+// ADVISORY_SETTABLE_FIELDS and advisories.js's publishAdvisory) -- so the
+// live row already *is* the latest published state for those fields, by
+// construction, not by a gating read here. Position/wind-field-radius
+// genuinely do stay live pre-classification (no advisory concept covers
+// them), matching NHC's own live-updating Tropical Weather Outlook.
 function publicViewFor(system) {
   if (!system.classified) return { system, points: trackPointsFor(system) };
   const advisory = latestAdvisoryFor(system.id);
@@ -351,7 +364,7 @@ function renderDiscussionCallout(selected, selectedView, bounds, rect) {
 
   discussionCalloutEl.textContent = selected.classified
     ? buildClassifiedCalloutText(selected, latestAdvisoryFor(selected.id), usingDemoData)
-    : buildDisturbanceCalloutText(selected, usingDemoData);
+    : buildDisturbanceCalloutText(selected, latestAdvisoryFor(selected.id), usingDemoData);
   discussionCalloutEl.hidden = false;
 
   const { x, y } = projectLonLat(selected.lon, selected.lat, bounds, rect.width, rect.height);
