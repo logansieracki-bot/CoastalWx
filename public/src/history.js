@@ -192,6 +192,16 @@ function historyEntriesFor(system) {
   return [{ system, issuedAt: system.updatedAt || system.createdAt || new Date().toISOString() }];
 }
 
+// historyEntriesFor(), restricted to entries with a confirmed position --
+// a not-yet-Formed disturbance's lat/lon is never shown or plotted, same
+// rule as the live map (see pointRenderer.js's hideUnformed). Used for
+// anything position-bearing (the track/wind chart, the Position row);
+// historyEntriesFor() itself stays unfiltered so header/color/development-
+// chance info still works for a system that's never been Formed at all.
+function formedEntriesFor(system) {
+  return historyEntriesFor(system).filter(({ system: snap }) => snap.formed);
+}
+
 // One point per entry, colored by *that entry's own* state -- systemColor
 // already picks category color once classified or formation-probability
 // color before that, so a track literally traces the strengthening/
@@ -200,7 +210,7 @@ function historyEntriesFor(system) {
 function pointsForSystem(systemId) {
   const system = systems.find((s) => s.id === systemId);
   if (!system) return [];
-  return historyEntriesFor(system).map(({ system: snap }) => ({
+  return formedEntriesFor(system).map(({ system: snap }) => ({
     lon: snap.lon, lat: snap.lat, color: systemColor(snap),
   }));
 }
@@ -211,7 +221,7 @@ function pointsForSystem(systemId) {
 function snapshotsForSystem(systemId) {
   const system = systems.find((s) => s.id === systemId);
   if (!system) return [];
-  return historyEntriesFor(system).map(({ system: snap }) => ({
+  return formedEntriesFor(system).map(({ system: snap }) => ({
     lon: snap.lon, lat: snap.lat,
     galeRadii: { ne: snap.galeRadiusNeMi, se: snap.galeRadiusSeMi, sw: snap.galeRadiusSwMi, nw: snap.galeRadiusNwMi },
     hfwRadii: {
@@ -221,7 +231,12 @@ function snapshotsForSystem(systemId) {
   }));
 }
 
-function boundsForPoints(points) {
+// `fallbackCenter`: a not-yet-Formed system can have zero points (see
+// formedEntriesFor) -- frame the map on its live lon/lat anyway (just
+// camera framing, not a plotted position) rather than collapsing to
+// Infinity/-Infinity and producing NaN bounds.
+function boundsForPoints(points, fallbackCenter) {
+  if (points.length === 0 && fallbackCenter) points = [fallbackCenter];
   let west = Infinity, east = -Infinity, south = Infinity, north = -Infinity;
   for (const p of points) {
     west = Math.min(west, p.lon); east = Math.max(east, p.lon);
@@ -316,11 +331,11 @@ function renderChart() {
   // trackHistoryRenderer.js draws (each dot carries data-index) -- clicking
   // a dot looks the full entry back up here, since the renderer only ever
   // sees the reduced {lon, lat, color} shape, not the whole snapshot.
-  currentEntries = system ? historyEntriesFor(system) : [];
+  currentEntries = system ? formedEntriesFor(system) : [];
   hidePointPopup();
   const points = pointsForSystem(selectedSystemId);
   const aspect = rect.width / Math.max(1, rect.height);
-  const bounds = fitBoundsToAspect(boundsForPoints(points), aspect);
+  const bounds = fitBoundsToAspect(boundsForPoints(points, system && { lon: system.lon, lat: system.lat }), aspect);
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
   trackHistoryRenderer.render({ points, bounds, width: rect.width, height: rect.height });
   windHistoryRenderer.render({ snapshots: snapshotsForSystem(selectedSystemId) });
@@ -485,7 +500,10 @@ function renderStormPanel(system) {
 
   const rows = document.createElement('div');
   rows.className = 'storm-panel__rows';
-  rows.append(panelRow('Position', formatPosition(latest.lat, latest.lon)));
+  // No confirmed position to show until Formed -- same rule as the live
+  // map (pointRenderer.js's hideUnformed) and the track/wind chart above
+  // (formedEntriesFor).
+  if (latest.formed) rows.append(panelRow('Position', formatPosition(latest.lat, latest.lon)));
 
   if (system.classified) {
     const categoryKey = intensityCategoryKey(intensityScore(latest));

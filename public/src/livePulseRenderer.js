@@ -1,10 +1,13 @@
-// A soft radiating ring behind every active system's marker on the public
+// A soft radiating ring behind every Formed system's marker on the public
 // live map -- purely decorative "this is live" motion, kept as its own
 // tiny public-only layer rather than folded into editor/src/pointRenderer.js
 // (shared with the forecaster tool, where this animation would just be
 // visual noise on a dense working map). Sits directly under the point
 // layer in z-order -- see wiring in main.js -- so the X marker itself
-// stays crisp while the ring radiates out from behind it.
+// stays crisp while the ring radiates out from behind it. Not-yet-Formed
+// systems are skipped here too -- pointRenderer.js already hides their
+// marker entirely (see hideUnformed), so a pulse behind an invisible
+// marker would just be a stray animated blob with nothing to anchor it.
 import { systemColor } from '../editor/src/constants.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -34,7 +37,7 @@ export function createLivePulseRenderer(svg) {
     const unit = screenUnit(bounds, width, height);
     const r = unit * 10;
 
-    systems.forEach((system, i) => {
+    systems.filter((system) => system.formed).forEach((system, i) => {
       const ring = el('circle', {
         class: 'live-pulse',
         cx: system.lon, cy: -system.lat, r,
