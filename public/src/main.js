@@ -95,39 +95,36 @@ const DEMO_FORECAST_POINTS = [
   { id: 'demo-fp-2', systemId: 'demo-1', sequence: 2, lon: -64.5, lat: 42, hour: 24, windMph: 60, spreadMi: 70, hourMode: 'auto', hourOverride: null, status: null },
   { id: 'demo-fp-3', systemId: 'demo-1', sequence: 3, lon: -61, lat: 44.5, hour: 36, windMph: 50, spreadMi: 100, hourMode: 'auto', hourOverride: null, status: 'over_water' },
 ];
-// Pre-classification discussion/probabilities are advisory-sourced too now
-// (see buildDisturbanceCalloutText) -- demo-2 needs its own demo advisory
-// or its callout would show the real "(No advisory published yet.)" empty
-// state instead of demoing the feature.
+// A shape + an arrow on the non-classified demo disturbance (marker at
+// lon -55, lat 28) -- demo-1 is already classified, and classified
+// systems' annotations are hidden (see visibleAnnotationsFrom()), same
+// rule as the editor. Kept spatially apart from the marker and from each
+// other -- both centered tight on the marker looked like a mess at
+// closer zoom (a real forecaster's own shape/arrow can of course still
+// end up that close; this is just demo content, not a rendering limit).
+// Points are [lon, lat] pairs here, matching the real wire format
+// (server/src/annotations.js's toApi) -- publicViewFor converts them to
+// {lon, lat} objects the same way for both real and demo data.
+const DEMO_ANNOTATIONS = [
+  { id: 'demo-ann-1', systemId: 'demo-2', type: 'shape', points: [[-53, 19], [-44, 18], [-45, 25], [-54, 24]] },
+  { id: 'demo-ann-2', systemId: 'demo-2', type: 'arrow', points: [[-55, 28], [-45, 36]] },
+];
+// Everything a real advisory snapshot carries (system/forecastPoints/
+// annotations) is embedded directly here too -- demo-2 needs its own demo
+// advisory or its callout, shape, and arrow would all show the real "(No
+// advisory published yet.)" empty state instead of demoing the feature.
 const DEMO_ADVISORIES = [
   {
     id: 'demo-adv-1', systemId: 'demo-1', number: 3, headline: null,
     discussion: 'Marlowe continues to weaken as it accelerates northeast over open water. No coastal impacts are expected with this system.',
     issuedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), issuedByUserId: 'demo', issuedByDisplayName: 'Demo Forecaster', cancelable: false,
-    snapshot: { system: DEMO_SYSTEMS[0], forecastPoints: DEMO_FORECAST_POINTS },
+    snapshot: { system: DEMO_SYSTEMS[0], forecastPoints: DEMO_FORECAST_POINTS, annotations: [] },
   },
   {
     id: 'demo-adv-2', systemId: 'demo-2', number: 1, headline: null,
     discussion: 'Broad, disorganized area of low pressure. Some slow development is possible while it drifts north-northeast over the next several days.',
     issuedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(), issuedByUserId: 'demo', issuedByDisplayName: 'Demo Forecaster', cancelable: false,
-    snapshot: { system: DEMO_SYSTEMS[1], forecastPoints: [] },
-  },
-];
-// A shape + an arrow on the non-classified demo disturbance (marker at
-// lon -55, lat 28) -- demo-1 is already classified, and classified
-// systems' annotations are hidden (see visibleAnnotations()), same rule
-// as the editor. Kept spatially apart from the marker and from each
-// other -- both centered tight on the marker looked like a mess at
-// closer zoom (a real forecaster's own shape/arrow can of course still
-// end up that close; this is just demo content, not a rendering limit).
-const DEMO_ANNOTATIONS = [
-  {
-    id: 'demo-ann-1', systemId: 'demo-2', type: 'shape',
-    points: [{ lon: -53, lat: 19 }, { lon: -44, lat: 18 }, { lon: -45, lat: 25 }, { lon: -54, lat: 24 }],
-  },
-  {
-    id: 'demo-ann-2', systemId: 'demo-2', type: 'arrow',
-    points: [{ lon: -55, lat: 28 }, { lon: -45, lat: 36 }],
+    snapshot: { system: DEMO_SYSTEMS[1], forecastPoints: [], annotations: DEMO_ANNOTATIONS },
   },
 ];
 
@@ -164,9 +161,7 @@ function animateNumber(el, target, duration = 600) {
 }
 
 let systems = [];
-let forecastPoints = [];
 let advisories = [];
-let annotations = [];
 let selectedId = null;
 let usingDemoData = false;
 let viewState = createViewState(INITIAL_BOUNDS);
@@ -196,24 +191,27 @@ async function fetchJson(path) {
   return res.json();
 }
 
+// Deliberately does NOT fetch /api/forecast-points or /api/annotations --
+// this page never has a legitimate reason to hold a system's live
+// forecast points or shapes/arrows in memory at all, published or not.
+// Everything this page ever shows for a system's track/cone/shapes comes
+// from its latest published advisory's own frozen snapshot (see
+// publicViewFor) -- fetching the live tables too would mean an editor's
+// in-progress drag/draw sits in this page's memory even if nothing ever
+// renders it, which is exactly the kind of leak (visible in a network
+// inspector even if never drawn) the advisory-gating rule is meant to
+// close for good.
 async function loadData() {
   try {
-    const [nextSystems, nextForecastPoints, nextAdvisories, nextAnnotations] = await Promise.all([
-      fetchJson('api/systems'), fetchJson('api/forecast-points'), fetchJson('api/advisories'), fetchJson('api/annotations'),
+    const [nextSystems, nextAdvisories] = await Promise.all([
+      fetchJson('api/systems'), fetchJson('api/advisories'),
     ]);
     systems = nextSystems;
-    forecastPoints = nextForecastPoints;
     advisories = nextAdvisories;
-    // Wire format is [[lon, lat], ...] pairs (see server/src/annotations.js);
-    // the renderer wants {lon, lat} objects, same conversion the editor's
-    // own api.js does for its remote backend.
-    annotations = nextAnnotations.map((a) => ({ ...a, points: a.points.map(([lon, lat]) => ({ lon, lat })) }));
     usingDemoData = false;
   } catch {
     systems = DEMO_SYSTEMS;
-    forecastPoints = DEMO_FORECAST_POINTS;
     advisories = DEMO_ADVISORIES;
-    annotations = DEMO_ANNOTATIONS;
     usingDemoData = true;
   }
   demoBannerEl.hidden = !usingDemoData;
@@ -229,12 +227,11 @@ function currentBounds() {
   return getAspectFittedBounds(viewState, aspect);
 }
 
-// Shared by trackPointsFor (live) and publicViewFor (advisory-snapshotted)
-// below -- both feed it the same {id, lon, lat, hour, spreadMi, windMph}
-// shape (forecastPoints.js's toApi() and an advisory's own snapshot use
-// identical field names), just from a different source array. A system's
-// own position is always its synthetic hour-0 point, prepended ahead of
-// the real forecast points.
+// Feeds mapTrackPoints's raw points into the {id, lon, lat, hour, spread,
+// symbol} shape trackConeRenderer wants. Only ever called on an advisory's
+// own snapshotted forecastPoints now (see publicViewFor) -- there's no
+// "live" variant anymore. A system's own position is always its synthetic
+// hour-0 point, prepended ahead of the real forecast points.
 function mapTrackPoints(rawPoints, system) {
   const own = rawPoints
     .slice()
@@ -246,64 +243,55 @@ function mapTrackPoints(rawPoints, system) {
   return [{ lon: system.lon, lat: system.lat, hour: 0, spread: 0 }, ...own];
 }
 
-// Mirrors editor/src/main.js's selectedSystemTrackPoints(). LIVE forecast
-// points for a system -- only right for a not-yet-classified system (which
-// never has a track at all) or internally before advisory-gating applies;
-// see publicViewFor for what a classified system's track actually shows.
-function trackPointsFor(system) {
-  if (!system || !system.classified) return [];
-  return mapTrackPoints(forecastPoints.filter((p) => p.systemId === system.id), system);
-}
-
 function latestAdvisoryFor(systemId) {
   const own = advisories.filter((a) => a.systemId === systemId);
   return own.reduce((latest, a) => (!latest || new Date(a.issuedAt) > new Date(latest.issuedAt) ? a : latest), null);
 }
 
-// Once Classified, everything shown publicly for a system -- marker color/
-// symbol, wind/gust/pressure, the forecast cone/track, the wind field --
-// comes from the latest PUBLISHED advisory's frozen snapshot, never live
-// editor data, so a forecaster can freely edit/save in the editor without
-// anything changing here until they actually publish (or a scheduled
-// advisory auto-publishes). This is the same rule
-// buildClassifiedCalloutText already follows for the discussion text (see
-// editor/src/discussionText.js); this extends it to everything else.
-// Pre-classification systems need no such override here: wind/gust/
-// pressure/formation-probabilities/discussion are only ever written to the
-// live system record at the moment an advisory publishes (see systems.js's
-// ADVISORY_SETTABLE_FIELDS and advisories.js's publishAdvisory) -- so the
-// live row already *is* the latest published state for those fields, by
-// construction, not by a gating read here. Position/wind-field-radius
-// genuinely do stay live pre-classification (no advisory concept covers
-// them), matching NHC's own live-updating Tropical Weather Outlook.
+// Everything shown publicly for a system -- marker position, shape/arrow
+// annotations, wind/gust/pressure, the forecast cone/track, the wind field
+// -- comes ONLY from the latest PUBLISHED advisory's frozen snapshot, at
+// every stage (disturbance, invest, or classified), never live editor
+// data. The editor is a fully separate draft workspace: a forecaster can
+// freely draw/drag/edit/save anything there and NOTHING here changes
+// until they actually click Publish or a scheduled advisory fires (see
+// advisories.js's publishAdvisory, which is the one place a snapshot is
+// ever taken). Before any advisory has ever been published, `published`
+// is false and this system gets no map presence at all -- no marker, no
+// shape, no cone, no wind field. It can still appear in the sidebar list
+// (name + formation probabilities + "No advisory published yet"), since
+// that data is already advisory-gated at the source (systems.js's
+// ADVISORY_SETTABLE_FIELDS) rather than needing a read-time override here.
 function publicViewFor(system) {
-  if (!system.classified) return { system, points: trackPointsFor(system) };
   const advisory = latestAdvisoryFor(system.id);
-  if (advisory) {
-    const snapSystem = advisory.snapshot.system;
-    return { system: snapSystem, points: mapTrackPoints(advisory.snapshot.forecastPoints, snapSystem) };
-  }
-  // Classified but nothing has ever been published for it -- keep its
-  // identity and live position (not sensitive forecast data, and there's
-  // no prior official position to freeze on instead) but strip every
-  // intensity field, so systemColor() falls back to its probability-tier
-  // color instead of guessing a category from still-unpublished numbers.
+  if (!advisory) return { system, points: [], annotations: [], published: false };
+  const snapSystem = advisory.snapshot.system;
   return {
-    system: {
-      ...system,
-      windMph: null, gustMph: null, pressureMb: null, galeRadiusMi: null,
-      galeRadiusNeMi: null, galeRadiusSeMi: null, galeRadiusSwMi: null, galeRadiusNwMi: null,
-      hurricaneForceRadiusNeMi: null, hurricaneForceRadiusSeMi: null, hurricaneForceRadiusSwMi: null, hurricaneForceRadiusNwMi: null,
-    },
-    points: [],
+    system: snapSystem,
+    points: mapTrackPoints(advisory.snapshot.forecastPoints ?? [], snapSystem),
+    // Wire format is [[lon, lat], ...] pairs (see server/src/annotations.js);
+    // the renderer wants {lon, lat} objects, same conversion the editor's
+    // own api.js applies for its remote backend.
+    annotations: (advisory.snapshot.annotations ?? []).map((a) => ({
+      ...a, points: a.points.map(([lon, lat]) => ({ lon, lat })),
+    })),
+    published: true,
   };
 }
 
-// Mirrors editor/src/main.js's visibleAnnotations() -- a classified
-// system's shapes/arrows are hidden, its forecast track/cone replacing
-// them as its visual representation, same rule here as in the editor.
-function visibleAnnotations() {
-  return annotations.filter((a) => !systems.find((s) => s.id === a.systemId)?.classified);
+// Shapes/arrows only ever show for a non-classified system -- once
+// Classified, its forecast track/cone replaces them as its visual
+// representation, same rule the editor follows (editor/src/main.js's
+// visibleAnnotations()) -- and only from whichever of those systems have
+// actually published, sourced entirely from `views` (each one already
+// computed by publicViewFor) rather than any separate live fetch.
+function visibleAnnotationsFrom(views) {
+  const result = [];
+  for (const view of views) {
+    if (!view.published || view.system.classified) continue;
+    result.push(...view.annotations);
+  }
+  return result;
 }
 
 // Bounding boxes (map-container-relative) of everything on the map the
@@ -388,18 +376,19 @@ function renderMap() {
   const bounds = currentBounds();
   const selected = systems.find((s) => s.id === selectedId) ?? null;
   const selectedView = selected ? publicViewFor(selected) : null;
-  // Systems as the public map should actually show them -- a classified
-  // one swapped for its latest published advisory's snapshot (or
-  // intensity-stripped if none exists yet). Shared by the marker layer and
+  const views = systems.map((s) => publicViewFor(s));
+  // Only systems with at least one published advisory get any presence on
+  // the map at all -- position, shape, cone, and wind field are all gated
+  // the same way now (see publicViewFor). Shared by the marker layer and
   // the live-pulse ring so their colors never disagree with each other.
-  const publicSystems = systems.map((s) => publicViewFor(s).system);
+  const publishedSystems = views.filter((v) => v.published).map((v) => v.system);
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
-  trackConeRenderer.render({ points: selectedView ? selectedView.points : [], selectedForecastPointId: null, bounds, width: rect.width, height: rect.height });
-  windFieldRenderer.render({ system: selectedView ? selectedView.system : null, activeThreshold: null, bounds, width: rect.width, height: rect.height });
+  trackConeRenderer.render({ points: selectedView?.published ? selectedView.points : [], selectedForecastPointId: null, bounds, width: rect.width, height: rect.height });
+  windFieldRenderer.render({ system: selectedView?.published ? selectedView.system : null, activeThreshold: null, bounds, width: rect.width, height: rect.height });
   renderDiscussionCallout(selected, selectedView, bounds, rect);
-  annotationRenderer.render({ annotations: visibleAnnotations(), selectedAnnotationId: null, draft: null, systems, bounds, width: rect.width, height: rect.height });
-  livePulseRenderer.render({ systems: publicSystems, bounds, width: rect.width, height: rect.height });
-  pointRenderer.render({ systems: publicSystems, selectedId, bounds, width: rect.width, height: rect.height });
+  annotationRenderer.render({ annotations: visibleAnnotationsFrom(views), selectedAnnotationId: null, draft: null, systems: publishedSystems, bounds, width: rect.width, height: rect.height });
+  livePulseRenderer.render({ systems: publishedSystems, bounds, width: rect.width, height: rect.height });
+  pointRenderer.render({ systems: publishedSystems, selectedId, bounds, width: rect.width, height: rect.height });
 }
 
 function setView(next) {

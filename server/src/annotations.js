@@ -8,7 +8,7 @@ function isValidPoints(points) {
     points.every((p) => Array.isArray(p) && p.length === 2 && typeof p[0] === 'number' && typeof p[1] === 'number');
 }
 
-function toApi(row) {
+export function toApi(row) {
   return {
     id: row.id,
     systemId: row.system_id,

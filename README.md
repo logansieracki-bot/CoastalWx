@@ -284,11 +284,19 @@ disturbance/invest/classified system as an expandable card (click a card,
 or its marker on the map, to open its detail inline). It shares the
 editor's own map/marker/cone/wind-field/annotation rendering code (imported
 directly, not duplicated) but none of its editing machinery — there is no
-write-capable UI on this page at all, not even a disabled one. Before a
-system is Classified, its card shows only formation probabilities — no
-intensity or category information appears until it's active; once any
-advisory has been published for it (at any stage), the card also shows
-that advisory's issued time.
+write-capable UI on this page at all, not even a disabled one. A system
+gets no presence on the map at all — no marker, no shape/arrow, no
+forecast cone, no wind field — until at least one advisory has been
+published for it; everything the map draws for a system comes from its
+*latest published advisory's* frozen snapshot, never live editor data
+(see **Advisories** above), so a forecaster can freely draw/drag/edit in
+the editor and nothing here changes until Publish or a fired Plan to
+Publish actually runs. Before Classified, a system's sidebar card still
+shows its name and formation probabilities (themselves already
+advisory-sourced) even with no map presence yet; no intensity or category
+information appears until it's active. Once any advisory has been
+published for it (at any stage), the card also shows that advisory's
+issued time.
 
 If no backend is reachable at all (the GitHub Pages deployment), the page
 falls back to a couple of clearly-labeled sample systems with a "DEMO

@@ -4,6 +4,7 @@ import { db } from './db.js';
 import { requireRole } from './auth.js';
 import { toApi as systemToApi, applySystemFields } from './systems.js';
 import { toApi as forecastPointToApi } from './forecastPoints.js';
+import { toApi as annotationToApi } from './annotations.js';
 
 const CANCEL_WINDOW_MS = 60 * 60 * 1000; // 1 hour, matching the plan's emergency-cancel window
 
@@ -54,11 +55,20 @@ export function publishAdvisory(system, { headline, discussion, issuedByUserId, 
     system = db.prepare('SELECT * FROM systems WHERE id = ?').get(system.id);
   }
 
-  // The immutable historical record: the system's full current data plus
-  // its whole forecast track, as one JSON blob -- stays true to what was
-  // known at publish time even as the live system keeps changing after.
+  // The immutable historical record: the system's full current data, its
+  // whole forecast track, and its shape/arrow annotations, as one JSON
+  // blob -- stays true to what was known at publish time even as the live
+  // system (and whatever a forecaster keeps drawing/dragging in the
+  // editor afterward) keeps changing after. This is the ONLY thing the
+  // public page ever reads for a system (see public/src/main.js's
+  // publicViewFor) -- nothing on the map updates until this runs again.
   const forecastPoints = db.prepare('SELECT * FROM forecast_points WHERE system_id = ? ORDER BY sequence ASC').all(system.id);
-  const snapshot = { system: systemToApi(system), forecastPoints: forecastPoints.map(forecastPointToApi) };
+  const annotationRows = db.prepare('SELECT * FROM annotations WHERE system_id = ? ORDER BY created_at ASC').all(system.id);
+  const snapshot = {
+    system: systemToApi(system),
+    forecastPoints: forecastPoints.map(forecastPointToApi),
+    annotations: annotationRows.map(annotationToApi),
+  };
 
   const { maxN } = db.prepare('SELECT MAX(number) AS maxN FROM advisories WHERE system_id = ?').get(system.id);
   const id = randomUUID();
