@@ -6,8 +6,10 @@ import { annotationsRouter } from './annotations.js';
 import { forecastPointsRouter } from './forecastPoints.js';
 import { authRouter } from './auth.js';
 import { advisoriesRouter } from './advisories.js';
+import { scheduledAdvisoriesRouter } from './scheduledAdvisories.js';
 import { positionLogRouter } from './positionLog.js';
 import { startBackupSchedule } from './backup.js';
+import { startScheduledAdvisoryRunner } from './scheduledAdvisoryRunner.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EDITOR_DIR = join(__dirname, '..', '..', 'editor');
@@ -20,6 +22,7 @@ app.use('/api', systemsRouter);
 app.use('/api', annotationsRouter);
 app.use('/api', forecastPointsRouter);
 app.use('/api', advisoriesRouter);
+app.use('/api', scheduledAdvisoriesRouter);
 app.use('/api', positionLogRouter);
 // The forecaster tool lives at /editor (bookmarked internally, gated by
 // login); the read-only public site is what the bare domain serves --
@@ -33,3 +36,4 @@ app.listen(PORT, () => {
 });
 
 startBackupSchedule();
+startScheduledAdvisoryRunner();

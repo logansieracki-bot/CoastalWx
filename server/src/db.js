@@ -38,7 +38,7 @@ db.exec(`
     hurricane_force_radius_nw_mi REAL,
     formed INTEGER NOT NULL DEFAULT 0,
     classified INTEGER NOT NULL DEFAULT 0,
-    forecast_interval INTEGER NOT NULL DEFAULT 12 CHECK (forecast_interval IN (6, 12, 24)),
+    forecast_interval INTEGER NOT NULL DEFAULT 12 CHECK (forecast_interval IN (3, 6, 12, 24)),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )
@@ -153,6 +153,27 @@ db.exec(`
 
 db.exec('CREATE INDEX IF NOT EXISTS idx_system_position_log_system_id ON system_position_log(system_id)');
 
+// A prepared advisory that hasn't published yet -- the forecaster wrote it
+// now but wants it to go out unattended at a future time (e.g. an early-
+// morning slot they won't be at a computer for). scheduledAdvisoryRunner.js
+// polls for due rows and turns each into a real `advisories` row at the
+// moment it actually fires, snapshotting the system's state then (not now),
+// then deletes this row either way -- published or not, it's consumed.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS scheduled_advisories (
+    id TEXT PRIMARY KEY,
+    system_id TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+    headline TEXT,
+    discussion TEXT,
+    scheduled_for TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    created_by_user_id TEXT NOT NULL REFERENCES users(id)
+  )
+`);
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_advisories_system_id ON scheduled_advisories(system_id)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_advisories_scheduled_for ON scheduled_advisories(scheduled_for)');
+
 // --- Additive migrations -- columns added after each table's initial
 // CREATE TABLE above. CREATE TABLE IF NOT EXISTS is a no-op against an
 // existing database file, so anyone with data from before these columns
@@ -177,3 +198,82 @@ addColumnIfMissing('systems', 'discussion_by_user_id', 'TEXT REFERENCES users(id
 // forecastPoints.js, not via a CHECK constraint, to keep this ALTER TABLE
 // simple against existing databases).
 addColumnIfMissing('forecast_points', 'status', 'TEXT');
+
+// Widens forecast_interval's CHECK to also allow 3 (alongside the existing
+// 6/12/24), for NHC-style 3-hourly intermediate advisories/cone spacing
+// during an active, fast-moving, or near-landfall situation. Unlike the
+// column additions above, SQLite has no ALTER TABLE for CHECK constraints
+// -- the only sanctioned way to change one is the "rebuild" dance: copy
+// into a new table with the wider constraint, drop the old one, rename.
+// Guarded by reading the table's own stored CREATE TABLE text, so this is
+// a no-op on every startup after the first time it actually runs.
+function migrateForecastIntervalCheck() {
+  const row = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'systems'`).get();
+  if (!row || row.sql.includes('forecast_interval IN (3, 6, 12, 24)')) return;
+
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    db.exec(`
+      CREATE TABLE systems_new (
+        id TEXT PRIMARY KEY,
+        season INTEGER NOT NULL,
+        sequence_number INTEGER NOT NULL,
+        name TEXT,
+        lat REAL NOT NULL,
+        lon REAL NOT NULL,
+        stage TEXT NOT NULL DEFAULT 'disturbance' CHECK (stage IN ('disturbance', 'invest')),
+        formation_probability_2day_pct INTEGER,
+        formation_probability_5day_pct INTEGER,
+        formation_probability_10day_pct INTEGER,
+        pressure_mb REAL,
+        wind_mph REAL,
+        gust_mph REAL,
+        gale_radius_ne_mi REAL,
+        gale_radius_se_mi REAL,
+        gale_radius_sw_mi REAL,
+        gale_radius_nw_mi REAL,
+        hurricane_force_radius_ne_mi REAL,
+        hurricane_force_radius_se_mi REAL,
+        hurricane_force_radius_sw_mi REAL,
+        hurricane_force_radius_nw_mi REAL,
+        formed INTEGER NOT NULL DEFAULT 0,
+        classified INTEGER NOT NULL DEFAULT 0,
+        forecast_interval INTEGER NOT NULL DEFAULT 12 CHECK (forecast_interval IN (3, 6, 12, 24)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        discussion TEXT,
+        discussion_by_user_id TEXT REFERENCES users(id)
+      )
+    `);
+    db.exec(`
+      INSERT INTO systems_new (
+        id, season, sequence_number, name, lat, lon, stage,
+        formation_probability_2day_pct, formation_probability_5day_pct, formation_probability_10day_pct,
+        pressure_mb, wind_mph, gust_mph,
+        gale_radius_ne_mi, gale_radius_se_mi, gale_radius_sw_mi, gale_radius_nw_mi,
+        hurricane_force_radius_ne_mi, hurricane_force_radius_se_mi, hurricane_force_radius_sw_mi, hurricane_force_radius_nw_mi,
+        formed, classified, forecast_interval, created_at, updated_at,
+        discussion, discussion_by_user_id
+      )
+      SELECT
+        id, season, sequence_number, name, lat, lon, stage,
+        formation_probability_2day_pct, formation_probability_5day_pct, formation_probability_10day_pct,
+        pressure_mb, wind_mph, gust_mph,
+        gale_radius_ne_mi, gale_radius_se_mi, gale_radius_sw_mi, gale_radius_nw_mi,
+        hurricane_force_radius_ne_mi, hurricane_force_radius_se_mi, hurricane_force_radius_sw_mi, hurricane_force_radius_nw_mi,
+        formed, classified, forecast_interval, created_at, updated_at,
+        discussion, discussion_by_user_id
+      FROM systems
+    `);
+    db.exec('DROP TABLE systems');
+    db.exec('ALTER TABLE systems_new RENAME TO systems');
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+}
+migrateForecastIntervalCheck();

@@ -15,7 +15,7 @@
 //                 (hourOverride) instead of the system's default interval,
 //                 for a single wider/narrower gap without changing every
 //                 other point.
-export const VALID_INTERVALS = [6, 12, 24];
+export const VALID_INTERVALS = [3, 6, 12, 24];
 
 function validInterval(value, fallback = 12) {
   const n = Number(value);

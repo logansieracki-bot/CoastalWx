@@ -233,6 +233,18 @@ permanently deletes it — not a retraction, a true undo. After the hour,
 it's permanent. The one-hour window is enforced by the server itself, not
 just hidden client-side once it passes.
 
+Advisories can also be prepared ahead of time: **Plan to Publish** takes
+the same discussion text plus a date/time, and stores it unpublished until
+then — for a forecaster who won't be at a computer at, say, 6am but wants
+that advisory to go out on schedule anyway. A small server-side job polls
+every 30 seconds for anything due and publishes it automatically,
+snapshotting the system's state at the moment it actually fires (not
+whenever it was originally planned), so it stays true to the same "what
+was known at publish time" rule as a manual publish. A planned advisory
+can be canceled any time before it fires (Forecaster role or higher); once
+it does publish, it's an ordinary advisory, including its own one-hour
+emergency-cancel window.
+
 ## Discussions
 
 Selecting any system opens a text callout right on the map, next to its

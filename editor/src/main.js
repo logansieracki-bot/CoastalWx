@@ -76,6 +76,7 @@ let forecastPoints = [];
 let selectedForecastPointId = null;
 let currentUser = null; // {id, username, displayName, role} | null -- from api.me()
 let advisories = [];
+let scheduledAdvisories = [];
 let activeWindThreshold = 'gale'; // 'gale' | 'hfw' -- which quadrant handles are shown/draggable
 let drawingSession = null; // { systemId, type: 'shape'|'arrow', points: [{lon,lat}] } | null
 let lastDrawClick = null; // { x, y, t } -- manual double-click detection for the arrow tool
@@ -741,6 +742,20 @@ function renderAdvisoriesSection(system) {
   discussionTextarea.disabled = !canPublish;
   wrap.append(field('Discussion', discussionTextarea));
 
+  // Same discussion text either way -- Publish issues it right now; Plan
+  // to Publish holds it and lets scheduledAdvisoryRunner.js (server-side)
+  // issue it unattended at this time instead, for a forecaster who won't
+  // be at a computer then.
+  const scheduledForInput = document.createElement('input');
+  scheduledForInput.type = 'datetime-local';
+  scheduledForInput.disabled = !canPublish;
+  const minWhen = new Date(Date.now() + 60000);
+  scheduledForInput.min = new Date(minWhen - minWhen.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  wrap.append(field('Scheduled for (Plan to Publish only)', scheduledForInput));
+
+  const actions = document.createElement('div');
+  actions.className = 'selected-actions';
+
   const publishBtn = document.createElement('button');
   publishBtn.textContent = 'Publish Advisory';
   publishBtn.className = 'primary';
@@ -753,7 +768,58 @@ function renderAdvisoriesSection(system) {
     renderSidebar();
     renderMap(); // the on-map discussion callout reads `advisories` too
   });
-  wrap.append(publishBtn);
+  actions.append(publishBtn);
+
+  const scheduleBtn = document.createElement('button');
+  scheduleBtn.textContent = 'Plan to Publish';
+  scheduleBtn.disabled = !canPublish;
+  scheduleBtn.title = canPublish ? 'Prepares this advisory now; it publishes automatically at the time set above' : publishBtn.title;
+  scheduleBtn.addEventListener('click', async () => {
+    if (!scheduledForInput.value) { alert('Pick a date and time first.'); return; }
+    const when = new Date(scheduledForInput.value);
+    if (!(when.getTime() > Date.now())) { alert('Scheduled time must be in the future.'); return; }
+    if (!confirm(`Plan an advisory for ${displayLabel(system)} to publish automatically at ${when.toLocaleString()}?`)) return;
+    const created = await api.createScheduledAdvisory(system.id, {
+      discussion: discussionTextarea.value.trim() || null,
+      scheduledFor: when.toISOString(),
+    });
+    scheduledAdvisories = [...scheduledAdvisories, created];
+    scheduledForInput.value = '';
+    renderSidebar();
+  });
+  actions.append(scheduleBtn);
+  wrap.append(actions);
+
+  const ownScheduled = scheduledAdvisories
+    .filter((s) => s.systemId === system.id)
+    .sort((a, b) => new Date(a.scheduledFor) - new Date(b.scheduledFor));
+  if (ownScheduled.length) {
+    const schedHeading = document.createElement('h4');
+    schedHeading.textContent = 'Scheduled';
+    wrap.append(schedHeading);
+    for (const sched of ownScheduled) {
+      const row = document.createElement('div');
+      row.className = 'account-user-row';
+      const name = document.createElement('span');
+      name.className = 'account-user-row__name';
+      name.textContent = `Publishes ${new Date(sched.scheduledFor).toLocaleString()}`;
+      row.append(name);
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.className = 'danger';
+      cancelBtn.disabled = !canPublish;
+      cancelBtn.title = canPublish ? 'Cancels this planned advisory -- it will never publish' : (localOnly ? 'Advisories require the real hosted backend' : 'Requires Forecaster role or higher');
+      cancelBtn.addEventListener('click', async () => {
+        if (!confirm('Cancel this planned advisory? It will never publish.')) return;
+        await api.cancelScheduledAdvisory(sched.id);
+        scheduledAdvisories = scheduledAdvisories.filter((s) => s.id !== sched.id);
+        renderSidebar();
+      });
+      row.append(cancelBtn);
+      wrap.append(row);
+    }
+  }
 
   if (own.length === 0) {
     const empty = document.createElement('p');
@@ -1047,6 +1113,7 @@ function renderSelectedPanel() {
     annotations = annotations.filter((a) => a.systemId !== system.id);
     forecastPoints = forecastPoints.filter((p) => p.systemId !== system.id);
     advisories = advisories.filter((a) => a.systemId !== system.id);
+    scheduledAdvisories = scheduledAdvisories.filter((s) => s.systemId !== system.id);
     select(null);
   });
 
@@ -1472,6 +1539,7 @@ async function init() {
       currentUser = user;
       loginUsernameInput.value = '';
       loginPasswordInput.value = '';
+      scheduledAdvisories = await api.listScheduledAdvisories().catch(() => []);
       updateAuthGate();
       renderSidebar();
       // The map was zero-size (and skipped rendering) while behind the
@@ -1501,6 +1569,15 @@ async function init() {
     api.listSystems(), api.listAnnotations(), api.listForecastPoints(), api.listAdvisories(),
     api.me().then((r) => r.user),
   ]);
+  // Scheduled (draft/unpublished) advisories require a logged-in session
+  // server-side -- fetched separately, only once we actually know we're
+  // authenticated (a persisted session cookie) or in local-only mode
+  // (where the stand-in harmlessly resolves to []), never bundled into the
+  // Promise.all above: that runs before login is known, and one 401 in a
+  // Promise.all fails every fetch in it, not just its own.
+  if (api.isLocalOnly() || currentUser) {
+    scheduledAdvisories = await api.listScheduledAdvisories().catch(() => []);
+  }
   updateToolAvailability();
   updateAuthGate();
   setTool('select');

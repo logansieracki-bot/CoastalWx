@@ -55,6 +55,10 @@ const remote = {
   listAdvisories: () => request('/advisories'),
   createAdvisory: (systemId, data) => request(`/systems/${systemId}/advisories`, { method: 'POST', body: JSON.stringify(data ?? {}) }),
   cancelAdvisory: (id) => request(`/advisories/${id}`, { method: 'DELETE' }),
+
+  listScheduledAdvisories: () => request('/scheduled-advisories'),
+  createScheduledAdvisory: (systemId, data) => request(`/systems/${systemId}/scheduled-advisories`, { method: 'POST', body: JSON.stringify(data) }),
+  cancelScheduledAdvisory: (id) => request(`/scheduled-advisories/${id}`, { method: 'DELETE' }),
 };
 
 // --- local fallback (browser localStorage, no server available) ---
@@ -296,6 +300,15 @@ const local = {
   async cancelAdvisory() {
     throw new Error('Advisories are not available in local-only mode.');
   },
+  async listScheduledAdvisories() {
+    return [];
+  },
+  async createScheduledAdvisory() {
+    throw new Error('Advisories are not available in local-only mode.');
+  },
+  async cancelScheduledAdvisory() {
+    throw new Error('Advisories are not available in local-only mode.');
+  },
 };
 
 // --- pick a backend once, at startup ---
@@ -338,5 +351,8 @@ export const api = {
   listAdvisories: (...args) => impl().listAdvisories(...args),
   createAdvisory: (...args) => impl().createAdvisory(...args),
   cancelAdvisory: (...args) => impl().cancelAdvisory(...args),
+  listScheduledAdvisories: (...args) => impl().listScheduledAdvisories(...args),
+  createScheduledAdvisory: (...args) => impl().createScheduledAdvisory(...args),
+  cancelScheduledAdvisory: (...args) => impl().cancelScheduledAdvisory(...args),
   isLocalOnly: () => backend === 'local',
 };

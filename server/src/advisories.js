@@ -40,11 +40,11 @@ advisoriesRouter.get('/advisories', (req, res) => {
   res.json(rows.map(toApi));
 });
 
-advisoriesRouter.post('/systems/:systemId/advisories', requireRole('owner', 'admin', 'forecaster'), (req, res) => {
-  const system = db.prepare('SELECT * FROM systems WHERE id = ?').get(req.params.systemId);
-  if (!system) return res.status(404).json({ error: 'system not found' });
-
-  const { headline, discussion } = req.body ?? {};
+// The actual publish logic, shared by the immediate route below and
+// scheduledAdvisoryRunner.js -- a scheduled advisory calls this at the
+// moment it actually fires, so it snapshots the system's real state then,
+// not whatever it was when the forecaster first scheduled it.
+export function publishAdvisory(system, { headline, discussion, issuedByUserId }) {
   // The immutable historical record: the system's full current data plus
   // its whole forecast track, as one JSON blob -- stays true to what was
   // known at publish time even as the live system keeps changing after.
@@ -57,9 +57,17 @@ advisoriesRouter.post('/systems/:systemId/advisories', requireRole('owner', 'adm
   db.prepare(`
     INSERT INTO advisories (id, system_id, number, headline, discussion, snapshot_json, issued_at, issued_by_user_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, system.id, (maxN ?? 0) + 1, headline ?? null, discussion ?? null, JSON.stringify(snapshot), now, req.user.id);
+  `).run(id, system.id, (maxN ?? 0) + 1, headline ?? null, discussion ?? null, JSON.stringify(snapshot), now, issuedByUserId);
 
-  res.status(201).json(toApi(db.prepare('SELECT * FROM advisories WHERE id = ?').get(id)));
+  return toApi(db.prepare('SELECT * FROM advisories WHERE id = ?').get(id));
+}
+
+advisoriesRouter.post('/systems/:systemId/advisories', requireRole('owner', 'admin', 'forecaster'), (req, res) => {
+  const system = db.prepare('SELECT * FROM systems WHERE id = ?').get(req.params.systemId);
+  if (!system) return res.status(404).json({ error: 'system not found' });
+
+  const { headline, discussion } = req.body ?? {};
+  res.status(201).json(publishAdvisory(system, { headline, discussion, issuedByUserId: req.user.id }));
 });
 
 // Emergency cancel -- a full hard delete, not a retraction marker, and
