@@ -1,6 +1,7 @@
 import {
   INITIAL_BOUNDS, maxFormationProbabilityPct, systemColor, displayLabel,
   intensityScore, intensityCategoryKey, categorySymbol, windOnlyIntensityScore, CATEGORY_INFO, defaultSpreadForHour,
+  WATCH_LEVEL_LABELS, WATCH_PRODUCTS,
 } from './constants.js';
 import { createViewState, getAspectFittedBounds, resetView } from './viewState.js';
 import { attachNavigation } from './navigation.js';
@@ -17,6 +18,7 @@ import { api, detectBackend } from './api.js';
 import { buildDisturbanceCalloutText, buildClassifiedCalloutText } from './discussionText.js';
 import { placeCallout } from './calloutPlacement.js';
 import { exportSvgAsPng } from './imageExport.js';
+import { createWatchRenderer } from './watchRenderer.js';
 
 const svg = document.getElementById('map');
 const systemsListEl = document.getElementById('systems-list');
@@ -78,8 +80,15 @@ let selectedForecastPointId = null;
 let currentUser = null; // {id, username, displayName, role} | null -- from api.me()
 let advisories = [];
 let scheduledAdvisories = [];
+let watches = [];
 let activeWindThreshold = 'gale'; // 'gale' | 'hfw' -- which quadrant handles are shown/draggable
 let drawingSession = null; // { systemId, type: 'shape'|'arrow', points: [{lon,lat}] } | null
+// Set by the Watches section's "Add zone" button, alongside setTool('shape')
+// -- consumed the moment a drawing session actually starts (tagging it as a
+// watch draft instead of a plain annotation), then cleared. setTool() itself
+// also clears it, so switching tools away before drawing anything can't
+// leave it stale for some later, unrelated shape-drawing session.
+let pendingWatchDraft = null; // { product, level } | null
 let lastDrawClick = null; // { x, y, t } -- manual double-click detection for the arrow tool
 let tool = 'select';
 let viewState = createViewState(INITIAL_BOUNDS);
@@ -89,6 +98,7 @@ let annotationRenderer = null;
 let trackConeRenderer = null;
 let spreadEditor = null;
 let windFieldRenderer = null;
+let watchRenderer = null;
 
 async function loadGeography() {
   const [land, lakes, borders, states] = await Promise.all(
@@ -242,6 +252,7 @@ function renderMap() {
   if (rect.width === 0 || rect.height === 0) return;
   const bounds = currentBounds();
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
+  watchRenderer.render({ watches });
   trackConeRenderer.render({ points: selectedSystemTrackPoints(), selectedForecastPointId, bounds, width: rect.width, height: rect.height });
   windFieldRenderer.render({ system: systems.find((s) => s.id === selectedId) ?? null, activeThreshold: activeWindThreshold, bounds, width: rect.width, height: rect.height });
   annotationRenderer.render({ annotations: visibleAnnotations(), selectedAnnotationId, draft: drawingSession, systems, bounds, width: rect.width, height: rect.height });
@@ -258,6 +269,7 @@ function setView(next) {
 function setTool(next) {
   tool = next;
   drawingSession = null; // nothing is persisted until finish, so switching tools loses nothing
+  pendingWatchDraft = null;
   lastDrawClick = null;
   for (const btn of toolButtons) btn.classList.toggle('is-active', btn.dataset.tool === tool);
   svg.classList.toggle('tool-create', tool === 'create-disturbance' || tool === 'add-forecast-point');
@@ -533,6 +545,114 @@ function renderAnnotationsSection(system) {
   });
   panel.append(title, meta, deleteBtn);
   selectedPanelEl.append(panel);
+}
+
+function productSelect(value) {
+  const select = document.createElement('select');
+  for (const opt of WATCH_PRODUCTS) {
+    const optionEl = document.createElement('option');
+    optionEl.value = opt.value;
+    optionEl.textContent = opt.label;
+    select.append(optionEl);
+  }
+  select.value = value ?? WATCH_PRODUCTS[0].value;
+  return select;
+}
+
+function levelSelect(value) {
+  const select = document.createElement('select');
+  for (const [val, label] of Object.entries(WATCH_LEVEL_LABELS)) {
+    const optionEl = document.createElement('option');
+    optionEl.value = val;
+    optionEl.textContent = label;
+    select.append(optionEl);
+  }
+  select.value = value ?? 'watch';
+  return select;
+}
+
+// Not gated on classified (unlike Shapes & Arrows / Forecast track above)
+// -- a watch/warning is relevant at every stage, and specifically stays
+// relevant *more* as a system intensifies, not less (see
+// public/src/main.js's visibleWatchesFrom, which deliberately has no
+// classified filter either). Drawing a new zone reuses the exact same
+// map-click gesture as Draw Shape (see handleDrawClick/finishDrawing) --
+// "Add zone" here just sets the tool and tags the upcoming session with
+// the product/level chosen below, rather than adding a whole separate
+// drawing mechanism (or a 6th permanent toolbar button).
+function renderWatchesSection(system) {
+  const ownWatches = watches.filter((w) => w.systemId === system.id);
+  const canWrite = canWriteRole('forecaster');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'annotations-section';
+  const heading = document.createElement('h4');
+  heading.textContent = 'Watches & warnings';
+  wrap.append(heading);
+
+  if (ownWatches.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-hint';
+    empty.textContent = 'None yet — pick a product and level below, then Add zone.';
+    wrap.append(empty);
+  } else {
+    for (const watch of ownWatches) {
+      const row = document.createElement('div');
+      row.className = 'forecast-point-row';
+
+      const product = productSelect(watch.product);
+      const level = levelSelect(watch.level);
+      product.disabled = level.disabled = !canWrite;
+
+      const saveBtn = document.createElement('button');
+      saveBtn.textContent = 'Save';
+      saveBtn.disabled = !canWrite;
+      saveBtn.title = canWrite ? 'Escalating/de-escalating is just changing the level here and saving' : 'Requires Forecaster role or higher';
+      saveBtn.addEventListener('click', async () => {
+        const updated = await api.updateWatch(watch.id, { product: product.value, level: level.value });
+        watches = watches.map((w) => (w.id === updated.id ? updated : w));
+        renderSidebar();
+        renderMap();
+      });
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.className = 'danger';
+      deleteBtn.disabled = !canWrite;
+      deleteBtn.title = canWrite ? '' : 'Requires Forecaster role or higher';
+      deleteBtn.addEventListener('click', async () => {
+        if (!confirm('Delete this watch/warning zone? This cannot be undone.')) return;
+        await api.deleteWatch(watch.id);
+        watches = watches.filter((w) => w.id !== watch.id);
+        renderSidebar();
+        renderMap();
+      });
+
+      row.append(product, level, saveBtn, deleteBtn);
+      wrap.append(row);
+    }
+  }
+
+  const newRow = document.createElement('div');
+  newRow.className = 'forecast-point-row';
+  const newProduct = productSelect();
+  const newLevel = levelSelect();
+  newProduct.disabled = newLevel.disabled = !canWrite;
+  const addZoneBtn = document.createElement('button');
+  addZoneBtn.textContent = 'Add zone';
+  addZoneBtn.className = 'primary';
+  addZoneBtn.disabled = !canWrite;
+  addZoneBtn.title = canWrite
+    ? 'Draw a new zone on the map -- click to place points, click near the start (or double-click) to finish'
+    : 'Requires Forecaster role or higher';
+  addZoneBtn.addEventListener('click', () => {
+    setTool('shape');
+    pendingWatchDraft = { product: newProduct.value, level: newLevel.value };
+  });
+  newRow.append(newProduct, newLevel, addZoneBtn);
+  wrap.append(newRow);
+
+  selectedPanelEl.append(wrap);
 }
 
 // After any change that can shift auto-scheduled hours (add, delete, a
@@ -1113,6 +1233,7 @@ function renderSelectedPanel() {
     forecastPoints = forecastPoints.filter((p) => p.systemId !== system.id);
     advisories = advisories.filter((a) => a.systemId !== system.id);
     scheduledAdvisories = scheduledAdvisories.filter((s) => s.systemId !== system.id);
+    watches = watches.filter((w) => w.systemId !== system.id);
     select(null);
   });
 
@@ -1126,6 +1247,9 @@ function renderSelectedPanel() {
   } else {
     renderAnnotationsSection(system);
   }
+  // Watches/warnings, like Advisories just below, are never gated on
+  // classified -- relevant (and drawable) at every stage.
+  renderWatchesSection(system);
   // Advisories can be published at any stage -- Disturbance, Invest, or
   // Classified (see server/src/advisories.js) -- so this section is never
   // gated on classified, unlike the track/cone and annotations sections above.
@@ -1206,6 +1330,16 @@ async function finishDrawing() {
   drawingSession = null;
   lastDrawClick = null;
   if (!session) return;
+  if (session.watchDraft) {
+    const created = await api.createWatch(session.systemId, {
+      product: session.watchDraft.product, level: session.watchDraft.level, points: session.points,
+    });
+    watches = [...watches, created];
+    setTool('select');
+    renderSidebar();
+    renderMap();
+    return;
+  }
   const created = await api.createAnnotation(session.systemId, { type: session.type, points: session.points });
   annotations = [...annotations, created];
   setTool('select');
@@ -1214,7 +1348,8 @@ async function finishDrawing() {
 
 async function handleDrawClick(geo, event) {
   if (!drawingSession) {
-    drawingSession = { systemId: selectedId, type: tool, points: [geo] };
+    drawingSession = { systemId: selectedId, type: tool, points: [geo], watchDraft: pendingWatchDraft };
+    pendingWatchDraft = null;
     lastDrawClick = { x: event.clientX, y: event.clientY, t: Date.now() };
     renderMap();
     return;
@@ -1483,6 +1618,10 @@ function setupPointerHandling() {
 async function init() {
   const geography = await loadGeography();
   mapRenderer = createMapRenderer(svg, geography);
+  // Broadest, most "background" non-basemap layer -- a hazard zone fill
+  // sits under the selected system's own wind field and every system's
+  // cone/track/marker, all of which should read as clearly on top of it.
+  watchRenderer = createWatchRenderer(svg);
   // windFieldRenderer's fill goes under the cone (appended before
   // trackConeRenderer is created, since that renderer self-appends
   // immediately) so the forecast cone reads as the topmost map-level
@@ -1558,8 +1697,8 @@ async function init() {
   await detectBackend();
   document.getElementById('local-mode-banner').hidden = !api.isLocalOnly();
 
-  [systems, annotations, forecastPoints, advisories, currentUser] = await Promise.all([
-    api.listSystems(), api.listAnnotations(), api.listForecastPoints(), api.listAdvisories(),
+  [systems, annotations, forecastPoints, advisories, watches, currentUser] = await Promise.all([
+    api.listSystems(), api.listAnnotations(), api.listForecastPoints(), api.listAdvisories(), api.listWatches(),
     api.me().then((r) => r.user),
   ]);
   // Scheduled (draft/unpublished) advisories require a logged-in session

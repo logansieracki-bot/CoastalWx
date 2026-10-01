@@ -2,6 +2,7 @@ const BASE = '/api';
 const STORAGE_KEY = 'noreastercaster:systems';
 const ANNOTATIONS_STORAGE_KEY = 'noreastercaster:annotations';
 const FORECAST_POINTS_STORAGE_KEY = 'noreastercaster:forecastPoints';
+const WATCHES_STORAGE_KEY = 'noreastercaster:watches';
 
 // --- remote backend (real server + database) ---
 
@@ -21,7 +22,7 @@ async function request(path, options) {
 
 function pointsToWire(points) { return points.map((p) => [p.lon, p.lat]); }
 function pointsFromWire(pairs) { return pairs.map(([lon, lat]) => ({ lon, lat })); }
-function annotationFromWire(a) { return { ...a, points: pointsFromWire(a.points) }; }
+function withPointsFromWire(a) { return { ...a, points: pointsFromWire(a.points) }; }
 
 const remote = {
   listSystems: () => request('/systems'),
@@ -29,16 +30,27 @@ const remote = {
   updateSystem: (id, data) => request(`/systems/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteSystem: (id) => request(`/systems/${id}`, { method: 'DELETE' }),
 
-  listAnnotations: async () => (await request('/annotations')).map(annotationFromWire),
+  listAnnotations: async () => (await request('/annotations')).map(withPointsFromWire),
   createAnnotation: async (systemId, { type, points }) =>
-    annotationFromWire(await request(`/systems/${systemId}/annotations`, {
+    withPointsFromWire(await request(`/systems/${systemId}/annotations`, {
       method: 'POST', body: JSON.stringify({ type, points: pointsToWire(points) }),
     })),
   updateAnnotation: async (id, { points }) =>
-    annotationFromWire(await request(`/annotations/${id}`, {
+    withPointsFromWire(await request(`/annotations/${id}`, {
       method: 'PATCH', body: JSON.stringify({ points: pointsToWire(points) }),
     })),
   deleteAnnotation: (id) => request(`/annotations/${id}`, { method: 'DELETE' }),
+
+  listWatches: async () => (await request('/watches')).map(withPointsFromWire),
+  createWatch: async (systemId, { product, level, points }) =>
+    withPointsFromWire(await request(`/systems/${systemId}/watches`, {
+      method: 'POST', body: JSON.stringify({ product, level, points: pointsToWire(points) }),
+    })),
+  updateWatch: async (id, { product, level, points }) =>
+    withPointsFromWire(await request(`/watches/${id}`, {
+      method: 'PATCH', body: JSON.stringify({ product, level, points: points ? pointsToWire(points) : undefined }),
+    })),
+  deleteWatch: (id) => request(`/watches/${id}`, { method: 'DELETE' }),
 
   listForecastPoints: () => request('/forecast-points'),
   createForecastPoint: (systemId, data) => request(`/systems/${systemId}/forecast-points`, { method: 'POST', body: JSON.stringify(data) }),
@@ -96,6 +108,22 @@ function writeAllAnnotations(rows) {
 
 function annotationToApi(row) {
   return { id: row.id, systemId: row.systemId, type: row.type, points: row.points, createdAt: row.createdAt, updatedAt: row.updatedAt };
+}
+
+function readAllWatches() {
+  try {
+    return JSON.parse(localStorage.getItem(WATCHES_STORAGE_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function writeAllWatches(rows) {
+  localStorage.setItem(WATCHES_STORAGE_KEY, JSON.stringify(rows));
+}
+
+function watchToApi(row) {
+  return { id: row.id, systemId: row.systemId, product: row.product, level: row.level, points: row.points, createdAt: row.createdAt, updatedAt: row.updatedAt };
 }
 
 function readAllForecastPoints() {
@@ -207,6 +235,7 @@ const local = {
     // system delete.
     writeAllAnnotations(readAllAnnotations().filter((r) => r.systemId !== id));
     writeAllForecastPoints(readAllForecastPoints().filter((r) => r.systemId !== id));
+    writeAllWatches(readAllWatches().filter((r) => r.systemId !== id));
   },
 
   async listAnnotations() {
@@ -229,6 +258,28 @@ const local = {
   },
   async deleteAnnotation(id) {
     writeAllAnnotations(readAllAnnotations().filter((r) => r.id !== id));
+  },
+
+  async listWatches() {
+    return readAllWatches().map(watchToApi);
+  },
+  async createWatch(systemId, { product, level, points }) {
+    const rows = readAllWatches();
+    const now = new Date().toISOString();
+    const row = { id: crypto.randomUUID(), systemId, product, level, points, createdAt: now, updatedAt: now };
+    writeAllWatches([...rows, row]);
+    return watchToApi(row);
+  },
+  async updateWatch(id, patch) {
+    const rows = readAllWatches();
+    const idx = rows.findIndex((r) => r.id === id);
+    if (idx === -1) throw new Error('not_found');
+    rows[idx] = { ...rows[idx], ...patch, updatedAt: new Date().toISOString() };
+    writeAllWatches(rows);
+    return watchToApi(rows[idx]);
+  },
+  async deleteWatch(id) {
+    writeAllWatches(readAllWatches().filter((r) => r.id !== id));
   },
 
   async listForecastPoints() {
@@ -332,6 +383,10 @@ export const api = {
   createAnnotation: (...args) => impl().createAnnotation(...args),
   updateAnnotation: (...args) => impl().updateAnnotation(...args),
   deleteAnnotation: (...args) => impl().deleteAnnotation(...args),
+  listWatches: (...args) => impl().listWatches(...args),
+  createWatch: (...args) => impl().createWatch(...args),
+  updateWatch: (...args) => impl().updateWatch(...args),
+  deleteWatch: (...args) => impl().deleteWatch(...args),
   listForecastPoints: (...args) => impl().listForecastPoints(...args),
   createForecastPoint: (...args) => impl().createForecastPoint(...args),
   updateForecastPoint: (...args) => impl().updateForecastPoint(...args),

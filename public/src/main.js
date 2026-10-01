@@ -11,7 +11,7 @@
 import {
   INITIAL_BOUNDS, systemColor, displayLabel, intensityScore, intensityCategoryKey,
   categorySymbol, windOnlyIntensityScore, CATEGORY_INFO, maxFormationProbabilityPct,
-  PROBABILITY_COLORS,
+  PROBABILITY_COLORS, WATCH_LEVEL_COLORS, WATCH_LEVEL_LABELS, watchColor, watchProductLabel,
 } from '../editor/src/constants.js';
 import { createViewState, getAspectFittedBounds } from '../editor/src/viewState.js';
 import { attachNavigation } from '../editor/src/navigation.js';
@@ -22,6 +22,7 @@ import { createAnnotationRenderer } from '../editor/src/annotationRenderer.js';
 import { createLivePulseRenderer } from './livePulseRenderer.js';
 import { createTrackConeRenderer } from '../editor/src/trackConeRenderer.js';
 import { createWindFieldRenderer } from '../editor/src/windFieldRenderer.js';
+import { createWatchRenderer } from '../editor/src/watchRenderer.js';
 import { buildDisturbanceCalloutText, buildClassifiedCalloutText } from '../editor/src/discussionText.js';
 import { placeCallout } from '../editor/src/calloutPlacement.js';
 import { buildConeDisks } from '../editor/src/trackGeometry.js';
@@ -110,22 +111,31 @@ const DEMO_ANNOTATIONS = [
   { id: 'demo-ann-1', systemId: 'demo-2', type: 'shape', points: [[-53, 19], [-44, 18], [-45, 25], [-54, 24]] },
   { id: 'demo-ann-2', systemId: 'demo-2', type: 'arrow', points: [[-55, 28], [-45, 36]] },
 ];
+// A watch/warning for Marlowe (demo-1) -- deliberately on the classified
+// demo system, not the disturbance, since this is exactly the case that
+// differs from shapes/arrows: a watch/warning keeps showing after
+// Classified instead of being hidden (see visibleWatchesFrom()). A small
+// zone near the southern New England coast, roughly along Marlowe's track.
+const DEMO_WATCHES = [
+  { id: 'demo-watch-1', systemId: 'demo-1', product: 'coastal_flood', level: 'warning', points: [[-71, 41], [-69.5, 41], [-69.5, 42], [-71, 42]] },
+];
 // Everything a real advisory snapshot carries (system/forecastPoints/
-// annotations) is embedded directly here too -- demo-2 needs its own demo
-// advisory or its callout, shape, and arrow would all show the real "(No
-// advisory published yet.)" empty state instead of demoing the feature.
+// annotations/watches) is embedded directly here too -- demo-2 needs its
+// own demo advisory or its callout, shape, and arrow would all show the
+// real "(No advisory published yet.)" empty state instead of demoing the
+// feature.
 const DEMO_ADVISORIES = [
   {
     id: 'demo-adv-1', systemId: 'demo-1', number: 3, headline: null,
     discussion: 'Marlowe continues to weaken as it accelerates northeast over open water. No coastal impacts are expected with this system.',
     issuedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), issuedByUserId: 'demo', issuedByDisplayName: 'Demo Forecaster', cancelable: false,
-    snapshot: { system: DEMO_SYSTEMS[0], forecastPoints: DEMO_FORECAST_POINTS, annotations: [] },
+    snapshot: { system: DEMO_SYSTEMS[0], forecastPoints: DEMO_FORECAST_POINTS, annotations: [], watches: DEMO_WATCHES },
   },
   {
     id: 'demo-adv-2', systemId: 'demo-2', number: 1, headline: null,
     discussion: 'Broad, disorganized area of low pressure. Some slow development is possible while it drifts north-northeast over the next several days.',
     issuedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(), issuedByUserId: 'demo', issuedByDisplayName: 'Demo Forecaster', cancelable: false,
-    snapshot: { system: DEMO_SYSTEMS[1], forecastPoints: [], annotations: DEMO_ANNOTATIONS },
+    snapshot: { system: DEMO_SYSTEMS[1], forecastPoints: [], annotations: DEMO_ANNOTATIONS, watches: [] },
   },
 ];
 
@@ -141,6 +151,7 @@ const systemListEmptyEl = document.getElementById('system-list-empty');
 const sidebarOverviewEl = document.getElementById('sidebar-overview');
 const mapLegendProbabilityEl = document.getElementById('map-legend-probability');
 const mapLegendCategoryEl = document.getElementById('map-legend-category');
+const mapLegendWatchEl = document.getElementById('map-legend-watch');
 
 const CATEGORY_ORDER = ['ed', 'ets', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5'];
 const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -172,6 +183,7 @@ let annotationRenderer = null;
 let trackConeRenderer = null;
 let windFieldRenderer = null;
 let livePulseRenderer = null;
+let watchRenderer = null;
 
 async function loadGeography() {
   // Relative to the document (not this module) -- fetch() resolves against
@@ -263,19 +275,23 @@ function latestAdvisoryFor(systemId) {
 // (name + formation probabilities + "No advisory published yet"), since
 // that data is already advisory-gated at the source (systems.js's
 // ADVISORY_SETTABLE_FIELDS) rather than needing a read-time override here.
+// Wire format for a points-bearing shape is [[lon, lat], ...] pairs (see
+// server/src/annotations.js / watches.js); the renderers want {lon, lat}
+// objects, same conversion the editor's own api.js applies for its
+// remote backend.
+function pointsFromWire(pairs) {
+  return pairs.map(([lon, lat]) => ({ lon, lat }));
+}
+
 function publicViewFor(system) {
   const advisory = latestAdvisoryFor(system.id);
-  if (!advisory) return { system, points: [], annotations: [], published: false };
+  if (!advisory) return { system, points: [], annotations: [], watches: [], published: false };
   const snapSystem = advisory.snapshot.system;
   return {
     system: snapSystem,
     points: mapTrackPoints(advisory.snapshot.forecastPoints ?? [], snapSystem),
-    // Wire format is [[lon, lat], ...] pairs (see server/src/annotations.js);
-    // the renderer wants {lon, lat} objects, same conversion the editor's
-    // own api.js applies for its remote backend.
-    annotations: (advisory.snapshot.annotations ?? []).map((a) => ({
-      ...a, points: a.points.map(([lon, lat]) => ({ lon, lat })),
-    })),
+    annotations: (advisory.snapshot.annotations ?? []).map((a) => ({ ...a, points: pointsFromWire(a.points) })),
+    watches: (advisory.snapshot.watches ?? []).map((w) => ({ ...w, points: pointsFromWire(w.points) })),
     published: true,
   };
 }
@@ -291,6 +307,19 @@ function visibleAnnotationsFrom(views) {
   for (const view of views) {
     if (!view.published || view.system.classified) continue;
     result.push(...view.annotations);
+  }
+  return result;
+}
+
+// Unlike shapes/arrows, watches/warnings are NOT hidden once Classified --
+// they matter *more* as a system intensifies, not less (see
+// editor/src/main.js's renderWatchesSection for the same rule). Every
+// published system's zones show, at every stage.
+function visibleWatchesFrom(views) {
+  const result = [];
+  for (const view of views) {
+    if (!view.published) continue;
+    result.push(...view.watches);
   }
   return result;
 }
@@ -384,6 +413,7 @@ function renderMap() {
   // the live-pulse ring so their colors never disagree with each other.
   const publishedSystems = views.filter((v) => v.published).map((v) => v.system);
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
+  watchRenderer.render({ watches: visibleWatchesFrom(views) });
   trackConeRenderer.render({ points: selectedView?.published ? selectedView.points : [], selectedForecastPointId: null, bounds, width: rect.width, height: rect.height });
   windFieldRenderer.render({ system: selectedView?.published ? selectedView.system : null, activeThreshold: null, bounds, width: rect.width, height: rect.height });
   renderDiscussionCallout(selected, selectedView, bounds, rect);
@@ -437,6 +467,29 @@ function appendDownloadImageButton(wrap, system, view) {
   wrap.append(btn);
 }
 
+// Per-system attribution: a colored zone on the map doesn't say which
+// storm issued it on its own, so each system's own card lists its own
+// watches/warnings explicitly -- same idea as "Latest advisory" and the
+// forecast track above, just for this system's own rows (never a
+// combined cross-system list -- see constants.js's WATCH_LEVEL_* comment).
+function appendWatchesList(wrap, view) {
+  if (!view.watches.length) return;
+  const heading = document.createElement('h4');
+  heading.className = 'system-card__subheading';
+  heading.textContent = 'Watches & warnings';
+  wrap.append(heading);
+  const list = document.createElement('ul');
+  list.className = 'system-card__watch-list';
+  for (const watch of view.watches) {
+    const li = document.createElement('li');
+    li.className = 'system-card__watch-item';
+    li.style.background = watchColor(watch.level);
+    li.textContent = `${WATCH_LEVEL_LABELS[watch.level] ?? watch.level} — ${watchProductLabel(watch.product)}`;
+    list.append(li);
+  }
+  wrap.append(list);
+}
+
 function buildCardDetail(system, view) {
   const wrap = document.createElement('div');
   wrap.className = 'system-card__detail';
@@ -456,6 +509,7 @@ function buildCardDetail(system, view) {
       ['10-day formation chance', system.formationProbability10dayPct],
     ];
     for (const [label, value] of probs) wrap.append(infoRow(label, value == null ? 'Not assessed' : `${value}%`));
+    appendWatchesList(wrap, view);
     appendDownloadImageButton(wrap, system, view);
     return wrap;
   }
@@ -486,6 +540,7 @@ function buildCardDetail(system, view) {
     ? infoRow('Latest advisory', new Date(advisory.issuedAt).toLocaleString())
     : infoRow('Status', 'No advisory published yet.'));
 
+  appendWatchesList(wrap, view);
   appendDownloadImageButton(wrap, system, view);
   return wrap;
 }
@@ -576,6 +631,17 @@ function renderMapLegend() {
     swatch.title = CATEGORY_INFO[key].label;
     swatch.textContent = categorySymbol(key) ?? '';
     mapLegendCategoryEl.append(swatch);
+  }
+  // Single-letter abbreviations here follow NWS/VTEC convention (the
+  // "significance" code suffixed onto a product's VTEC string) -- A for
+  // Watch, W for Warning -- rather than inventing new ones.
+  const WATCH_LEVEL_SYMBOL = { watch: 'A', warning: 'W' };
+  for (const key of ['watch', 'warning']) {
+    const swatch = document.createElement('span');
+    swatch.style.background = WATCH_LEVEL_COLORS[key];
+    swatch.title = WATCH_LEVEL_LABELS[key];
+    swatch.textContent = WATCH_LEVEL_SYMBOL[key];
+    mapLegendWatchEl.append(swatch);
   }
 }
 
@@ -694,6 +760,7 @@ async function refresh() {
 async function init() {
   const geography = await loadGeography();
   mapRenderer = createMapRenderer(svg, geography);
+  watchRenderer = createWatchRenderer(svg);
   windFieldRenderer = createWindFieldRenderer(svg);
   svg.append(windFieldRenderer.fieldLayer); // under the cone/markers -- see windFieldRenderer.js
   trackConeRenderer = createTrackConeRenderer(svg);

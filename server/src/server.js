@@ -8,6 +8,7 @@ import { authRouter } from './auth.js';
 import { advisoriesRouter } from './advisories.js';
 import { scheduledAdvisoriesRouter } from './scheduledAdvisories.js';
 import { positionLogRouter } from './positionLog.js';
+import { watchesRouter } from './watches.js';
 import { startBackupSchedule } from './backup.js';
 import { startScheduledAdvisoryRunner } from './scheduledAdvisoryRunner.js';
 
@@ -24,6 +25,7 @@ app.use('/api', forecastPointsRouter);
 app.use('/api', advisoriesRouter);
 app.use('/api', scheduledAdvisoriesRouter);
 app.use('/api', positionLogRouter);
+app.use('/api', watchesRouter);
 // The forecaster tool lives at /editor (bookmarked internally, gated by
 // login); the read-only public site is what the bare domain serves --
 // visitors land on the public page by default, not the editor.

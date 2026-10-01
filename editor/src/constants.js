@@ -115,6 +115,43 @@ export function systemColor(system) {
   return PROBABILITY_COLORS[probabilityTier(maxFormationProbabilityPct(system))];
 }
 
+// A watch/warning's severity axis, deliberately a third hue family
+// distinct from both PROBABILITY_COLORS (blue) and CATEGORY_INFO (green
+// through purple) -- standard NWS watch=yellow/warning=red convention,
+// not NHC's hurricane-specific magenta-watch one, since this app is
+// coastal/Nor'easter-focused, not hurricane-focused.
+export const WATCH_LEVEL_COLORS = {
+  watch: '#eab308',
+  warning: '#dc2626',
+};
+
+export const WATCH_LEVEL_LABELS = { watch: 'Watch', warning: 'Warning' };
+
+export function watchColor(level) {
+  return WATCH_LEVEL_COLORS[level] ?? WATCH_LEVEL_COLORS.watch;
+}
+
+// Kept in sync by hand with the identical allowlist in
+// server/src/watches.js (validated server-side there; this is only ever
+// the display label both the editor's drafting UI and the public page's
+// per-system attribution read from) -- same "duplicate the tiny
+// allowlist per file" convention this app already uses for
+// forecastPoints.js's POINT_STATUSES, just shared here across the two
+// client pages since both need the same labels (unlike POINT_STATUSES,
+// which is editor-only).
+export const WATCH_PRODUCTS = [
+  { value: 'coastal_flood', label: 'Coastal Flood' },
+  { value: 'storm_surge', label: 'Storm Surge' },
+  { value: 'high_wind', label: 'High Wind' },
+  { value: 'winter_storm', label: 'Winter Storm' },
+  { value: 'blizzard', label: 'Blizzard' },
+  { value: 'gale', label: 'Gale' },
+];
+
+export function watchProductLabel(product) {
+  return WATCH_PRODUCTS.find((p) => p.value === product)?.label ?? product;
+}
+
 // Used everywhere a mile radius needs converting to a degree radius (cone
 // spread, forecast-point geometry) -- one shared constant instead of being
 // redefined per file.

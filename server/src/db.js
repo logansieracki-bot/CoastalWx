@@ -57,6 +57,31 @@ db.exec(`
 
 db.exec('CREATE INDEX IF NOT EXISTS idx_annotations_system_id ON annotations(system_id)');
 
+// A hazard alert for a freeform zone a forecaster draws (same [lon,lat]
+// pair wire shape as annotations.points) -- NHC-style Watches/Warnings,
+// not restricted to the coast (NHC's own current practice extends
+// tropical watches/warnings well inland for wind threat). `product` is
+// deliberately not CHECK-constrained -- validated server-side against a
+// fixed allowlist instead (see watches.js), since widening a CHECK
+// constraint later means a full table rebuild (see
+// migrateForecastIntervalCheck below for what that costs). `level` is a
+// stable enough binary to CHECK directly. Escalating/de-escalating is a
+// PATCH that flips `level` on the same row -- id and created_at persist
+// across the change, so a watch's history stays one continuous record.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS watches (
+    id TEXT PRIMARY KEY,
+    system_id TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+    product TEXT NOT NULL,
+    level TEXT NOT NULL CHECK (level IN ('watch', 'warning')),
+    points TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`);
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_watches_system_id ON watches(system_id)');
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS forecast_points (
     id TEXT PRIMARY KEY,

@@ -302,6 +302,11 @@ button:disabled:hover { border-color: var(--ui-border); }
 .wind-field { vector-effect: non-scaling-stroke; pointer-events: none; stroke-width: 1.35px; }
 .wind-field-gale { fill: rgba(240, 188, 74, .46); stroke: #c9912b; }
 .wind-field-hfw { fill: rgba(159, 72, 72, .5); stroke: #8f4141; }
+
+/* Watch/warning zones -- color comes from watchColor() inline per
+   instance (severity, not an owning system), same "CSS gives shape/
+   non-scaling-stroke, JS gives per-instance color" split as wind-field. */
+.watch-zone-fill { vector-effect: non-scaling-stroke; pointer-events: none; stroke-width: 2px; }
 .wind-guide {
   stroke: rgba(29, 48, 70, .45); stroke-width: 1px;
   stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; pointer-events: none;
