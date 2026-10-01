@@ -35,7 +35,7 @@ const NAME_POOL = {
   W: ['Wrenfield', 'Winslow', 'Wilhelmina', 'Warrick', 'Wynne'],
 };
 
-function pickSeasonName(letter) {
+export function pickSeasonName(letter) {
   const pool = NAME_POOL[letter];
   return pool[Math.floor(Math.random() * pool.length)];
 }
