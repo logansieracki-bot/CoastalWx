@@ -21,9 +21,38 @@ export function attachNavigation({
   shouldStartPan = () => true
 }) {
   let drag = null;
+  // Multi-touch pinch-to-zoom -- a Map so each finger's own last-known
+  // position survives regardless of pointerdown/move/up ordering between
+  // the two. Gated purely on how many pointers are simultaneously down,
+  // not on shouldStartPan (unlike single-finger pan): you can't
+  // "pinch-select" a marker/annotation the way one touch can, so pinch
+  // should work no matter what's under either finger.
+  const pointers = new Map();
+  let pinch = null; // { lastDistance } | null, non-null only while exactly 2 pointers are down
 
   function geoAtEvent(event, bounds = getRenderedBounds()) {
     return clientPointToGeo(event.clientX, event.clientY, svg.getBoundingClientRect(), bounds);
+  }
+
+  // setPointerCapture can throw (e.g. the pointer already released by the
+  // time this runs) -- best-effort only. Capture just keeps events
+  // flowing if a finger briefly crosses the element's bounds mid-gesture;
+  // losing it isn't fatal, but letting the exception escape uncaught
+  // would abort whichever caller's gesture-start logic hadn't finished
+  // yet (for the pinch-start caller, that would silently skip setting
+  // `pinch` entirely and the gesture would never engage).
+  function tryCapture(pointerId) {
+    try { svg.setPointerCapture?.(pointerId); } catch { /* best-effort */ }
+  }
+
+  function pinchMidpoint() {
+    const [a, b] = [...pointers.values()];
+    return { clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 };
+  }
+
+  function pinchDistance() {
+    const [a, b] = [...pointers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
   function emitPointer(event) {
@@ -33,6 +62,20 @@ export function attachNavigation({
   }
 
   function onPointerDown(event) {
+    if (pointers.size >= 2) return; // a 3rd+ simultaneous finger is a no-op, no 3-finger gestures
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (pointers.size === 2) {
+      // A 2nd finger just joined -- end any single-finger pan in favor of
+      // pinch-zoom, and seed the starting distance immediately (not
+      // deferred to the first move) so there's no wasted first frame.
+      if (drag) { drag = null; svg.classList.remove('is-panning'); }
+      for (const id of pointers.keys()) tryCapture(id);
+      pinch = { lastDistance: pinchDistance() };
+      event.preventDefault();
+      return;
+    }
+
     if (event.button !== 0) return;
     if (!shouldStartPan(event)) return;
     const bounds = getRenderedBounds();
@@ -44,12 +87,39 @@ export function attachNavigation({
       displayBounds: { ...bounds },
       view: getView()
     };
-    svg.setPointerCapture?.(event.pointerId);
+    tryCapture(event.pointerId);
     svg.classList.add('is-panning');
     event.preventDefault();
   }
 
   function onPointerMove(event) {
+    if (pointers.has(event.pointerId)) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (pinch && pointers.size === 2) {
+      const bounds = getRenderedBounds();
+      if (!bounds) return;
+      const rect = svg.getBoundingClientRect();
+      const mid = pinchMidpoint();
+      const anchor = clientPointToGeo(mid.clientX, mid.clientY, rect, bounds);
+      const dist = pinchDistance();
+      // Recomputed fresh each tick against the CURRENT distance (not
+      // accumulated from gesture-start), same incremental-update style
+      // onWheel already uses per scroll tick -- avoids any compounding
+      // drift over a long pinch. Fingers spreading apart (dist grows)
+      // means factor < 1, which zooms in -- same sign convention
+      // wheelDeltaToZoomFactor already establishes for this map.
+      if (dist > 0 && pinch.lastDistance > 0) {
+        const current = getView();
+        const source = { ...current, bounds: { ...bounds } };
+        const next = zoomViewAt(source, pinch.lastDistance / dist, anchor);
+        next.initialBounds = current.initialBounds;
+        setView(next);
+        onPointerGeo?.(anchor);
+      }
+      pinch.lastDistance = dist;
+      return;
+    }
+
     emitPointer(event);
     if (!drag || event.pointerId !== drag.pointerId) return;
     const rect = svg.getBoundingClientRect();
@@ -71,6 +141,11 @@ export function attachNavigation({
   }
 
   function endDrag(event) {
+    pointers.delete(event.pointerId);
+    // Deliberately simple: dropping below 2 fingers just ends the pinch
+    // rather than trying to seamlessly resume a single-finger pan with
+    // whichever pointer is left -- the user can start a fresh drag.
+    if (pointers.size < 2) pinch = null;
     if (!drag || (event.pointerId !== undefined && event.pointerId !== drag.pointerId)) return;
     drag = null;
     svg.classList.remove('is-panning');
@@ -95,6 +170,10 @@ export function attachNavigation({
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', endDrag);
   svg.addEventListener('pointerleave', event => {
+    if (pointers.has(event.pointerId)) {
+      if (event.buttons === 0) endDrag(event);
+      return;
+    }
     if (!drag) onPointerGeo?.(null);
     else if (event.buttons === 0) endDrag(event);
   });

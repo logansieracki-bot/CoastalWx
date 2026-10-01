@@ -237,7 +237,7 @@ async function loadData() {
 function currentBounds() {
   const rect = svg.getBoundingClientRect();
   const aspect = rect.width / Math.max(1, rect.height);
-  return getAspectFittedBounds(viewState, aspect);
+  return clampToBounds(getAspectFittedBounds(viewState, aspect), PUBLIC_MAX_BOUNDS);
 }
 
 // Feeds mapTrackPoints's raw points into the {id, lon, lat, hour, spread,
@@ -384,6 +384,20 @@ function renderDiscussionCallout(selected, selectedView, bounds, rect) {
     ? buildClassifiedCalloutText(selected, latestAdvisoryFor(selected.id), usingDemoData)
     : buildDisturbanceCalloutText(selected, latestAdvisoryFor(selected.id), usingDemoData);
   discussionCalloutEl.hidden = false;
+
+  // Below the same 760px breakpoint the rest of the mobile layout
+  // switches on: free-floating obstacle-avoidance placement stops being
+  // meaningful once the callout's own max-width is most of the map's
+  // width anyway (every candidate rect just clamps to an edge) -- dock
+  // it to a predictable spot instead of trying to make that math work
+  // in ~300-390px.
+  if (window.matchMedia('(max-width: 760px)').matches) {
+    discussionCalloutEl.classList.add('discussion-callout--docked');
+    discussionCalloutEl.style.left = '';
+    discussionCalloutEl.style.top = '';
+    return;
+  }
+  discussionCalloutEl.classList.remove('discussion-callout--docked');
 
   const { x, y } = projectLonLat(selected.lon, selected.lat, bounds, rect.width, rect.height);
   const obstacles = collectObstacleRects(rect);

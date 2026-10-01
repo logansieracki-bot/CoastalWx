@@ -26,6 +26,7 @@ function withPointsFromWire(a) { return { ...a, points: pointsFromWire(a.points)
 
 const remote = {
   listSystems: () => request('/systems'),
+  listArchivedSystems: () => request('/systems/archived'),
   createSystem: (data) => request('/systems', { method: 'POST', body: JSON.stringify(data) }),
   updateSystem: (id, data) => request(`/systems/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteSystem: (id) => request(`/systems/${id}`, { method: 'DELETE' }),
@@ -192,6 +193,7 @@ function toApi(row) {
     formed: !!row.formed,
     classified: !!row.classified,
     forecastInterval: row.forecastInterval ?? 12,
+    archivedAt: row.archivedAt ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -199,7 +201,12 @@ function toApi(row) {
 
 const local = {
   async listSystems() {
-    return readAll().sort((a, b) => b.season - a.season || a.sequenceNumber - b.sequenceNumber).map(toApi);
+    return readAll().filter((r) => !r.archivedAt)
+      .sort((a, b) => b.season - a.season || a.sequenceNumber - b.sequenceNumber).map(toApi);
+  },
+  async listArchivedSystems() {
+    return readAll().filter((r) => r.archivedAt)
+      .sort((a, b) => (b.archivedAt > a.archivedAt ? 1 : -1)).map(toApi);
   },
   async createSystem({ lat, lon }) {
     const rows = readAll();
@@ -229,13 +236,15 @@ const local = {
     return toApi(rows[idx]);
   },
   async deleteSystem(id) {
-    writeAll(readAll().filter((r) => r.id !== id));
-    // Cascade, mirroring the server's ON DELETE CASCADE -- otherwise
-    // localStorage mode leaks orphaned annotations/forecast points on every
-    // system delete.
-    writeAllAnnotations(readAllAnnotations().filter((r) => r.systemId !== id));
-    writeAllForecastPoints(readAllForecastPoints().filter((r) => r.systemId !== id));
-    writeAllWatches(readAllWatches().filter((r) => r.systemId !== id));
+    // Archives, mirroring the server's archived_at soft-delete -- does
+    // NOT cascade/remove annotations/forecast points/watches anymore,
+    // since those should survive for the Past Storm Analysis page the
+    // same way they do against the real backend.
+    const rows = readAll();
+    const idx = rows.findIndex((r) => r.id === id);
+    if (idx === -1) throw new Error('not_found');
+    rows[idx] = { ...rows[idx], archivedAt: new Date().toISOString() };
+    writeAll(rows);
   },
 
   async listAnnotations() {
@@ -376,6 +385,7 @@ function impl() {
 
 export const api = {
   listSystems: (...args) => impl().listSystems(...args),
+  listArchivedSystems: (...args) => impl().listArchivedSystems(...args),
   createSystem: (...args) => impl().createSystem(...args),
   updateSystem: (...args) => impl().updateSystem(...args),
   deleteSystem: (...args) => impl().deleteSystem(...args),

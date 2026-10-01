@@ -174,7 +174,7 @@ button:disabled:hover { border-color: var(--ui-border); }
 .selected-actions button { flex: 1; }
 
 .map-wrap { flex: 1; position: relative; background: var(--water-color); }
-#map { width: 100%; height: 100%; display: block; cursor: default; user-select: none; }
+#map { width: 100%; height: 100%; display: block; cursor: default; user-select: none; touch-action: none; }
 #map.tool-create, #map.tool-draw { cursor: crosshair; }
 #map.is-panning { cursor: grabbing; }
 

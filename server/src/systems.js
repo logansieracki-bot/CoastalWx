@@ -60,6 +60,7 @@ export function toApi(row) {
     formed: !!row.formed,
     classified: !!row.classified,
     forecastInterval: row.forecast_interval,
+    archivedAt: row.archived_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -68,7 +69,18 @@ export function toApi(row) {
 export const systemsRouter = Router();
 
 systemsRouter.get('/systems', (req, res) => {
-  const rows = db.prepare('SELECT * FROM systems ORDER BY season DESC, sequence_number ASC').all();
+  const rows = db.prepare('SELECT * FROM systems WHERE archived_at IS NULL ORDER BY season DESC, sequence_number ASC').all();
+  res.json(rows.map(toApi));
+});
+
+// Public, no role gate -- same "client eager-loads once" rationale as
+// /annotations and /watches. The sole read surface the Past Storm
+// Analysis page needs; everything else it wants (advisories, position
+// log) already comes from the existing unfiltered /advisories and
+// /position-log endpoints, which were never scoped to "active systems
+// only" in the first place.
+systemsRouter.get('/systems/archived', (req, res) => {
+  const rows = db.prepare('SELECT * FROM systems WHERE archived_at IS NOT NULL ORDER BY archived_at DESC').all();
   res.json(rows.map(toApi));
 });
 
@@ -228,8 +240,17 @@ systemsRouter.patch('/systems/:id', requireRole(...ROLES), (req, res) => {
   res.json(api);
 });
 
+// Archives rather than destroys -- a real SQL DELETE here would cascade
+// and permanently wipe every advisory/forecast point/annotation/watch/
+// position-log row for the storm (see db.js's archived_at migration
+// comment). The route/verb stay the same as before so no client call
+// site needs to change; only what happens server-side differs. The
+// WHERE also excludes an already-archived row, so re-archiving one
+// 404s same as archiving a never-existed id -- both mean "nothing left
+// to delete" from the caller's perspective.
 systemsRouter.delete('/systems/:id', requireRole('owner', 'admin', 'forecaster'), (req, res) => {
-  const result = db.prepare('DELETE FROM systems WHERE id = ?').run(req.params.id);
+  const result = db.prepare('UPDATE systems SET archived_at = ? WHERE id = ? AND archived_at IS NULL')
+    .run(new Date().toISOString(), req.params.id);
   if (result.changes === 0) return res.status(404).json({ error: 'not_found' });
   res.status(204).end();
 });

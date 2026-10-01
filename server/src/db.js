@@ -236,6 +236,17 @@ addColumnIfMissing('forecast_points', 'status', 'TEXT');
 // subset of system fields rather than its own fixed shape.
 addColumnIfMissing('scheduled_advisories', 'pending_fields_json', 'TEXT');
 
+// Soft delete -- NULL (the universal state before this column existed)
+// means active; a timestamp means archived. The "Delete" button in the
+// editor now archives instead of running a hard DELETE, so a storm's
+// advisories/forecast points/annotations/watches/position log (every one
+// of which cascades off systems.id) survive and stay visible on the
+// public Past Storm Analysis page instead of being destroyed outright.
+// Doesn't change storm-naming behavior: storm_names.used_by_system_id
+// keeps pointing at the (now-archived, still-existing) system row either
+// way, so assignStormName still never reassigns a retired name.
+addColumnIfMissing('systems', 'archived_at', 'TEXT');
+
 // Widens forecast_interval's CHECK to also allow 3 (alongside the existing
 // 6/12/24), for NHC-style 3-hourly intermediate advisories/cone spacing
 // during an active, fast-moving, or near-landfall situation. Unlike the

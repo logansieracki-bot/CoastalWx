@@ -1226,7 +1226,7 @@ function renderSelectedPanel() {
   deleteBtn.disabled = !canDeleteRole;
   deleteBtn.title = canDeleteRole ? '' : 'Requires Forecaster role or higher';
   deleteBtn.addEventListener('click', async () => {
-    if (!confirm(`Delete ${system.displayName}? This cannot be undone.`)) return;
+    if (!confirm(`Delete ${system.displayName}? Its advisories and track history will move to Past Storm Analysis.`)) return;
     await api.deleteSystem(system.id);
     systems = systems.filter((s) => s.id !== system.id);
     annotations = annotations.filter((a) => a.systemId !== system.id);

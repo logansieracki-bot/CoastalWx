@@ -30,7 +30,15 @@
 }
 .history-stat__value { font-size: 17px; font-weight: 700; }
 
-.history-chart-wrap { flex: 1; position: relative; min-height: 300px; background: var(--water); }
+/* On desktop, .history-chart-surface is position:absolute;inset:0 --
+   this wrap's only job is to hold it (a no-op for the flex column
+   below, since an absolutely-positioned child ignores flex layout
+   entirely). Below the 860px breakpoint (see .storm-panel below for
+   why that's a different number than this page's other 760px
+   breakpoint), .storm-panel becomes a normal-flow child here too, and
+   the column layout is what stacks it above the surface. */
+.history-chart-wrap { flex: 1; position: relative; min-height: 300px; display: flex; flex-direction: column; gap: 12px; }
+.history-chart-surface { position: absolute; inset: 0; background: var(--water); }
 #history-chart { width: 100%; height: 100%; display: block; user-select: none; }
 
 .storm-panel {
@@ -148,4 +156,26 @@
 
 @media (max-width: 760px) {
   .history-pane { margin: 14px; }
+}
+
+/* Deliberately NOT 760px, the breakpoint everywhere else on this page
+   uses -- .storm-panel (226px) and .history-chart-tabs (~225px) are
+   both pinned to the same top corner strip, and the two only stop
+   touching once the chart area has roughly 495px to give them both
+   room; with the sidebar (330px) beside the content, that only holds
+   true above ~840px of viewport width, not 760px. 761-840px is real
+   "desktop-mode but narrow" territory (e.g. a laptop split-screen)
+   where the general breakpoint alone would still leave them
+   overlapping. Rounded up to 860 for margin against the tabs' own
+   measured-width uncertainty -- don't merge this into the 760px rule
+   above, the two breakpoints are solving different problems. */
+@media (max-width: 860px) {
+  /* flex-shrink:0 is required, not decorative -- .history-chart-wrap's
+     column flex otherwise has nothing stopping a short viewport from
+     squeezing the panel's height toward zero (surface's min-height:300px
+     is a floor that protects IT, not the panel, so all the shrink
+     pressure would land here instead), collapsing it to a sliver that
+     .storm-panel's own overflow:hidden then clips to invisible. */
+  .storm-panel { position: static; width: auto; margin: 0 12px; flex-shrink: 0; }
+  .history-chart-surface { position: relative; flex: 1; min-height: 300px; }
 }
