@@ -339,7 +339,7 @@ migrateForecastIntervalCheck();
 
 // Widens watches.level's CHECK to also allow 'advisory' (a third,
 // lower-severity tier below 'watch' -- see constants.js's
-// WATCH_LEVEL_COLORS for the full severity ordering), via the same
+// WATCH_LEVEL_LABELS for the full severity ordering), via the same
 // rebuild dance as migrateForecastIntervalCheck above -- SQLite still has
 // no ALTER TABLE for CHECK constraints. Also recreates
 // idx_watches_system_id, which the DROP TABLE below takes with it.

@@ -51,6 +51,12 @@ export const CATEGORY_INFO = {
   cat5: { label: 'Category 5', color: '#5c2160' },
 };
 
+// This app's own gale-force threshold -- same 34kt+ convention
+// windFieldRenderer.js's 'gale' wind-radius threshold already uses,
+// converted to mph (its field values are always mph, 34kt was only ever
+// a naming reference).
+export const GALE_FORCE_MPH = 39;
+
 // Score = [(V-30) + 0.15*(G-45)] * min(1, sqrt(R/400)) + 0.5*(1010-p)
 // V=sustained wind mph, G=max gust mph, R=gale-radius miles, p=central mb.
 // Wind, gust, and pressure points are all floored at 0 -- a weak wind, weak
@@ -58,13 +64,22 @@ export const CATEGORY_INFO = {
 // factor is capped at 1 -- an oversized wind field earns no bonus credit
 // beyond the system's own wind+gust contribution, it just stops suppressing
 // it (see windFieldRenderer.js's wind-radius editor for how R is set).
+// R is optional -- a system can be classified before its wind field is
+// drawn out (see editor/src/main.js's canClassify), so a missing radius
+// here just means no size scaling yet (factor 1), same as
+// pointIntensityScore's identical "no radius data yet" fallback below.
+// Sub-gale wind is hard-capped to Extratropical Depression regardless of
+// how deep the pressure term runs -- category is fundamentally a wind-
+// speed bucket (closed circulation alone doesn't make a Storm), the same
+// real-world convention a depression/storm/hurricane split follows.
 export function intensityScore({ windMph, gustMph, galeRadiusMi, pressureMb }) {
-  if ([windMph, gustMph, galeRadiusMi, pressureMb].some((v) => typeof v !== 'number')) return null;
+  if ([windMph, gustMph, pressureMb].some((v) => typeof v !== 'number')) return null;
   const windPoints = Math.max(0, windMph - 30);
   const gustPoints = Math.max(0, 0.15 * (gustMph - 45));
-  const sizeFactor = Math.min(1, Math.sqrt(galeRadiusMi / 400));
+  const sizeFactor = typeof galeRadiusMi === 'number' ? Math.min(1, Math.sqrt(galeRadiusMi / 400)) : 1;
   const pressurePoints = Math.max(0, 0.5 * (1010 - pressureMb));
-  return (windPoints + gustPoints) * sizeFactor + pressurePoints;
+  const score = (windPoints + gustPoints) * sizeFactor + pressurePoints;
+  return windMph < GALE_FORCE_MPH ? Math.min(score, 8) : score;
 }
 
 // A forecast point's own intensity symbol: wind alone (same "points above
@@ -121,24 +136,39 @@ export function systemColor(system) {
   return PROBABILITY_COLORS[probabilityTier(maxFormationProbabilityPct(system))];
 }
 
-// A watch/warning/advisory's severity axis, deliberately a third hue
-// family distinct from both PROBABILITY_COLORS (blue) and CATEGORY_INFO
-// (green through purple) -- standard NWS watch=yellow/warning=red
-// convention, not NHC's hurricane-specific magenta-watch one, since this
-// app is coastal/Nor'easter-focused, not hurricane-focused. Advisory is
-// the mildest of the three, not a mid-tier between watch and warning --
-// real NWS severity order is advisory < watch < warning -- so it gets the
-// palest shade of this same yellow-to-red family.
-export const WATCH_LEVEL_COLORS = {
-  advisory: '#fde68a',
-  watch: '#eab308',
-  warning: '#dc2626',
+// One base hue per product -- the family a zone's color belongs to.
+// Severity within that family is lightness/saturation (WATCH_LEVEL_SHADE
+// below), not a different hue, so pale -> dark == mild -> severe stays
+// readable the same way PROBABILITY_COLORS/CATEGORY_INFO already do.
+// Not fully collision-free against CATEGORY_INFO's green->purple sweep --
+// 6 more distinct hues don't fit the wheel without some proximity, and
+// that's an accepted tradeoff (different map layers, never compared side
+// by side) rather than an oversight.
+export const WATCH_PRODUCT_HUES = {
+  coastal_flood: 190, // cyan
+  storm_surge: 265,   // violet
+  high_wind: 20,      // orange
+  winter_storm: 215,  // blue
+  blizzard: 320,      // magenta
+  gale: 150,          // sea green
 };
 
+// Advisory is the mildest of the three, not a mid-tier between watch and
+// warning -- real NWS severity order is advisory < watch < warning.
 export const WATCH_LEVEL_LABELS = { advisory: 'Advisory', watch: 'Watch', warning: 'Warning' };
 
-export function watchColor(level) {
-  return WATCH_LEVEL_COLORS[level] ?? WATCH_LEVEL_COLORS.watch;
+// Same mild -> severe lightness/saturation ramp applied to every product's
+// own hue -- pale/low-saturation for Advisory, dark/saturated for Warning.
+const WATCH_LEVEL_SHADE = {
+  advisory: { s: 55, l: 80 },
+  watch: { s: 65, l: 55 },
+  warning: { s: 75, l: 35 },
+};
+
+export function watchColor(product, level) {
+  const hue = WATCH_PRODUCT_HUES[product] ?? WATCH_PRODUCT_HUES.coastal_flood;
+  const shade = WATCH_LEVEL_SHADE[level] ?? WATCH_LEVEL_SHADE.watch;
+  return `hsl(${hue}, ${shade.s}%, ${shade.l}%)`;
 }
 
 // Kept in sync by hand with the identical allowlist in
@@ -160,6 +190,26 @@ export const WATCH_PRODUCTS = [
 
 export function watchProductLabel(product) {
   return WATCH_PRODUCTS.find((p) => p.value === product)?.label ?? product;
+}
+
+// Which overlap treatment a product's zones get when two of them overlap
+// on the same system (see watchRenderer.js): 'lane' for coastline-hugging
+// hazards (rendered as a fill plus outline-only additional zones so none
+// hide each other), 'stripe' for area/polygon hazards (rendered as a
+// diagonal two-color pattern over the overlap region). Scoped to same-
+// geometry-type pairs only -- a lane zone overlapping a stripe zone just
+// renders stacked as normal, no cross-category blending.
+export const WATCH_GEOMETRY_TYPE = {
+  coastal_flood: 'lane',
+  storm_surge: 'lane',
+  high_wind: 'stripe',
+  winter_storm: 'stripe',
+  blizzard: 'stripe',
+  gale: 'stripe',
+};
+
+export function watchGeometryType(product) {
+  return WATCH_GEOMETRY_TYPE[product] ?? 'stripe';
 }
 
 // Used everywhere a mile radius needs converting to a degree radius (cone

@@ -1122,7 +1122,7 @@ function renderIntensitySection(system) {
   readout.className = 'intensity-readout';
   const score = intensityScore(system);
   if (score == null) {
-    readout.textContent = 'Publish an advisory with wind, gust, pressure, and a gale wind field to calculate.';
+    readout.textContent = 'Publish an advisory with wind, gust, and pressure to calculate.';
   } else {
     const key = intensityCategoryKey(score);
     readout.textContent = `Score ${score.toFixed(1)} → ${CATEGORY_INFO[key].label}`;
@@ -1158,16 +1158,20 @@ function renderIntensitySection(system) {
   wrap.append(details);
 
   if (!system.classified) {
+    // Gale radius (wind-field extent) is deliberately NOT required here --
+    // it's a separate "how big is its wind field" step, not one of the
+    // classification criteria in the confirm dialog below, and
+    // intensityScore() already degrades gracefully (no size scaling) when
+    // it's still unset.
     const canClassify = system.stage === 'invest' && system.formed &&
-      system.windMph != null && system.gustMph != null &&
-      system.galeRadiusMi != null && system.pressureMb != null;
+      system.windMph != null && system.gustMph != null && system.pressureMb != null;
     const classifyBtn = document.createElement('button');
     classifyBtn.textContent = 'Classify';
     const canClassifyRole = canWriteRole('forecaster');
     classifyBtn.disabled = !canClassify || !canClassifyRole;
     classifyBtn.title = !canClassifyRole
       ? 'Requires Forecaster role or higher'
-      : (canClassify ? '' : 'Investigate it, mark it Formed, and save wind/gust/radius/pressure first.');
+      : (canClassify ? '' : 'Investigate it, mark it Formed, and save wind/gust/pressure first.');
     classifyBtn.addEventListener('click', async () => {
       const key = intensityCategoryKey(intensityScore(system));
       const label = key ? CATEGORY_INFO[key].label : 'a category';

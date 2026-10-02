@@ -29,12 +29,20 @@ export function toApi(row) {
 
 export const watchesRouter = Router();
 
-// All watches, every system -- same eager-load rationale as GET
-// /annotations and GET /forecast-points. Left public (no requireRole),
-// same as every other GET here -- the public page reads this too, and
-// its own gating happens at the advisory-snapshot layer, not here.
+// All watches, every LIVE system -- same eager-load rationale as GET
+// /annotations and GET /forecast-points (and the same join to exclude an
+// archived system's own rows -- see GET /annotations' own comment for
+// why). Left public (no requireRole), same as every other GET here, even
+// though only the editor actually calls this one today -- the public
+// page gets its watches from each advisory's own snapshot instead
+// (public/src/main.js's publicViewFor), never this live endpoint.
 watchesRouter.get('/watches', (req, res) => {
-  const rows = db.prepare('SELECT * FROM watches ORDER BY created_at ASC').all();
+  const rows = db.prepare(`
+    SELECT watches.* FROM watches
+    JOIN systems ON systems.id = watches.system_id
+    WHERE systems.archived_at IS NULL
+    ORDER BY watches.created_at ASC
+  `).all();
   res.json(rows.map(toApi));
 });
 

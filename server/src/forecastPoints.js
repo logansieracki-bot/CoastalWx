@@ -43,11 +43,19 @@ export function toApi(row) {
 
 export const forecastPointsRouter = Router();
 
-// All forecast points, every system -- the client eager-loads this once,
-// same rationale as GET /annotations (every system's track/cone can render
-// simultaneously when nothing is selected).
+// All forecast points, every LIVE system -- the client eager-loads this
+// once, same rationale as GET /annotations (every system's track/cone can
+// render simultaneously when nothing is selected). Joined against systems
+// to exclude an archived system's own rows -- see GET /annotations' own
+// comment for why this matters (orphaned rows outliving their deleted
+// system otherwise).
 forecastPointsRouter.get('/forecast-points', (req, res) => {
-  const rows = db.prepare('SELECT * FROM forecast_points ORDER BY system_id ASC, sequence ASC').all();
+  const rows = db.prepare(`
+    SELECT forecast_points.* FROM forecast_points
+    JOIN systems ON systems.id = forecast_points.system_id
+    WHERE systems.archived_at IS NULL
+    ORDER BY forecast_points.system_id ASC, forecast_points.sequence ASC
+  `).all();
   res.json(rows.map(toApi));
 });
 

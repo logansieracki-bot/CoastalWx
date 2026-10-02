@@ -11,7 +11,7 @@
 import {
   INITIAL_BOUNDS, systemColor, displayLabel, intensityScore, intensityCategoryKey,
   categorySymbol, pointIntensityScore, CATEGORY_INFO, maxFormationProbabilityPct,
-  PROBABILITY_COLORS, WATCH_LEVEL_COLORS, WATCH_LEVEL_LABELS, watchColor, watchProductLabel,
+  PROBABILITY_COLORS, WATCH_LEVEL_LABELS, WATCH_PRODUCTS, watchColor, watchProductLabel,
 } from '../editor/src/constants.js';
 import { createViewState, getAspectFittedBounds } from '../editor/src/viewState.js';
 import { attachNavigation } from '../editor/src/navigation.js';
@@ -155,6 +155,7 @@ const mapLegendEl = document.getElementById('map-legend');
 const mapLegendProbabilityEl = document.getElementById('map-legend-probability');
 const mapLegendCategoryEl = document.getElementById('map-legend-category');
 const mapLegendWatchEl = document.getElementById('map-legend-watch');
+const mapLegendWatchToggleEl = document.getElementById('map-legend-watch-toggle');
 
 const CATEGORY_ORDER = ['ed', 'ets', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5'];
 const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -527,7 +528,7 @@ function appendWatchesList(wrap, view) {
   for (const watch of view.watches) {
     const li = document.createElement('li');
     li.className = 'system-card__watch-item';
-    li.style.background = watchColor(watch.level);
+    li.style.background = watchColor(watch.product, watch.level);
     li.textContent = `${WATCH_LEVEL_LABELS[watch.level] ?? watch.level} — ${watchProductLabel(watch.product)}`;
     list.append(li);
   }
@@ -687,17 +688,39 @@ function renderMapLegend() {
     swatch.textContent = categorySymbol(key) ?? '';
     mapLegendCategoryEl.append(swatch);
   }
-  // Single-letter abbreviations here follow NWS/VTEC convention (the
-  // "significance" code suffixed onto a product's VTEC string) -- Y for
-  // Advisory, A for Watch, W for Warning -- rather than inventing new ones.
-  const WATCH_LEVEL_SYMBOL = { advisory: 'Y', watch: 'A', warning: 'W' };
-  for (const key of ['advisory', 'watch', 'warning']) {
-    const swatch = document.createElement('span');
-    swatch.style.background = WATCH_LEVEL_COLORS[key];
-    swatch.title = WATCH_LEVEL_LABELS[key];
-    swatch.textContent = WATCH_LEVEL_SYMBOL[key];
-    mapLegendWatchEl.append(swatch);
+  // Collapsible product x level key -- 18 combinations is too many to show
+  // open at all times without the legend bar permanently growing several
+  // times its current size (it's already a tight fit on a phone), so this
+  // starts collapsed and expands into a 6-product x 3-level grid on click,
+  // same toggle/class/aria-expanded pattern topbarNav.js's mobile menu
+  // already uses (collapsed-by-default here, not just below a breakpoint).
+  const cornerCell = document.createElement('span');
+  mapLegendWatchEl.append(cornerCell);
+  for (const level of ['advisory', 'watch', 'warning']) {
+    const headCell = document.createElement('span');
+    headCell.className = 'map-legend__watch-head';
+    headCell.textContent = WATCH_LEVEL_LABELS[level];
+    mapLegendWatchEl.append(headCell);
   }
+  for (const product of WATCH_PRODUCTS) {
+    const labelCell = document.createElement('span');
+    labelCell.className = 'map-legend__watch-row-label';
+    labelCell.textContent = product.label;
+    mapLegendWatchEl.append(labelCell);
+    for (const level of ['advisory', 'watch', 'warning']) {
+      const swatch = document.createElement('span');
+      swatch.className = 'map-legend__watch-swatch';
+      swatch.style.background = watchColor(product.value, level);
+      swatch.title = `${product.label} — ${WATCH_LEVEL_LABELS[level]}`;
+      mapLegendWatchEl.append(swatch);
+    }
+  }
+
+  mapLegendWatchToggleEl.addEventListener('click', () => {
+    const open = !mapLegendWatchEl.classList.contains('is-open');
+    mapLegendWatchEl.classList.toggle('is-open', open);
+    mapLegendWatchToggleEl.setAttribute('aria-expanded', String(open));
+  });
 }
 
 function renderHeroStatus() {

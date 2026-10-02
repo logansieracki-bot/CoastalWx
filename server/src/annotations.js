@@ -21,10 +21,24 @@ export function toApi(row) {
 
 export const annotationsRouter = Router();
 
-// All annotations, every system -- the client eager-loads this once so every
-// system's shapes/arrows can render simultaneously when nothing is selected.
+// All annotations, every LIVE system -- the client eager-loads this once so
+// every system's shapes/arrows can render simultaneously when nothing is
+// selected. Joined against systems to exclude an archived (soft-deleted)
+// system's own rows -- GET /systems already excludes those systems
+// themselves, and leaving their annotations in this list left them
+// orphaned client-side (no owning system found -> visibleAnnotations()'s
+// classified-check in editor/src/main.js can't tell "hidden, classified" apart
+// from "its system doesn't exist here," and defaulted to showing them --
+// a stale shape outliving its own deleted system). Past Storm Analysis
+// doesn't need these rows either -- it rebuilds history from advisories'
+// own point-in-time snapshots, not these live tables.
 annotationsRouter.get('/annotations', (req, res) => {
-  const rows = db.prepare('SELECT * FROM annotations ORDER BY created_at ASC').all();
+  const rows = db.prepare(`
+    SELECT annotations.* FROM annotations
+    JOIN systems ON systems.id = annotations.system_id
+    WHERE systems.archived_at IS NULL
+    ORDER BY annotations.created_at ASC
+  `).all();
   res.json(rows.map(toApi));
 });
 

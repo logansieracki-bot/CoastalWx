@@ -237,6 +237,40 @@ body {
   font-size: 9.5px; font-weight: 800; color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
 }
 
+/* The watch/warning group's title doubles as its expand/collapse button
+   (18 product x level swatches is too many to show open at all times --
+   see map-legend__watch-grid below) -- reset button chrome back to how
+   the plain .map-legend__title span already looks, plus a chevron that
+   flips when expanded. */
+.map-legend__toggle {
+  display: flex; align-items: center; gap: 3px;
+  background: none; border: none; padding: 0; margin: 0;
+  font: inherit; cursor: pointer;
+}
+.map-legend__toggle:hover { color: var(--text); }
+.map-legend__chevron { display: inline-block; font-size: 8px; transition: transform .15s ease; }
+.map-legend__toggle[aria-expanded="true"] .map-legend__chevron { transform: rotate(180deg); }
+
+/* Collapsed by default at every width (not just below a breakpoint --
+   unlike .topbar__links, which this reuses the toggle/class/aria-expanded
+   mechanics of) -- 18 swatches permanently open would make the legend bar
+   several times today's size. */
+.map-legend__watch-grid {
+  display: none;
+  grid-template-columns: auto repeat(3, 1fr);
+  gap: 3px; align-items: center; margin-top: 2px;
+}
+.map-legend__watch-grid.is-open { display: grid; }
+.map-legend__watch-head {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  color: var(--text-muted); text-align: center; padding: 0 2px;
+}
+.map-legend__watch-row-label {
+  font-size: 10px; font-weight: 600; color: var(--text-muted);
+  white-space: nowrap; padding-right: 6px;
+}
+.map-legend__watch-swatch { width: 18px; height: 18px; border-radius: 5px; }
+
 .land { fill: var(--land); stroke: var(--coast); stroke-width: 1.4px; vector-effect: non-scaling-stroke; }
 .lake { fill: var(--water); stroke: var(--coast); stroke-width: 0.9px; vector-effect: non-scaling-stroke; }
 .country-borders { fill: none; stroke: var(--border-line); stroke-width: 1.1px; vector-effect: non-scaling-stroke; }
@@ -317,6 +351,9 @@ body {
   .hero { flex-wrap: wrap; }
   .map-legend { gap: 10px; padding: 8px 10px; }
   .map-legend__swatches span { width: 15px; height: 15px; font-size: 8.5px; }
+  .map-legend__watch-swatch { width: 15px; height: 15px; }
+  .map-legend__watch-row-label { font-size: 9px; }
+  .map-legend__watch-head { font-size: 8px; }
 
   .topbar__menu-toggle { display: flex; }
   .topbar__links {
@@ -343,6 +380,13 @@ body {
      tapped -- see main.js's systemListExpanded wiring, which also auto-
      collapses it on selecting a system or tapping the map outside it. */
   .map-pane { position: absolute; inset: 0; margin: 10px; flex: none; }
+  /* Lifted clear of #system-list's own 56px collapsed handle just below
+     (14px original gap + 56px handle) -- pre-existing overlap that only
+     ever mattered cosmetically before (a 3rd legend group wrapping below
+     the visible fold was still just a static color key), now a real bug
+     since that group's title is a click target (the watch/warning
+     collapse toggle just above). */
+  .map-legend { bottom: 70px; }
   #system-list {
     position: absolute; left: 0; right: 0; bottom: 0; top: auto;
     flex: none; width: auto; max-height: 75vh;
@@ -383,6 +427,9 @@ body {
   .map-legend { gap: 8px; padding: 7px 9px; }
   .map-legend__title { font-size: 9px; }
   .map-legend__swatches span { width: 13px; height: 13px; font-size: 7.5px; }
+  .map-legend__watch-swatch { width: 13px; height: 13px; }
+  .map-legend__watch-row-label { font-size: 8px; }
+  .map-legend__watch-head { font-size: 7px; }
   .system-card__summary { padding: 11px 12px; }
   .system-card__detail { padding: 0 12px 12px; }
 }

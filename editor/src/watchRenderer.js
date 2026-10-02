@@ -46,7 +46,7 @@ export function createWatchRenderer(svg) {
 
     for (const watch of watches) {
       if (watch.points.length < 3) continue; // nothing to close yet
-      const color = watchColor(watch.level);
+      const color = watchColor(watch.product, watch.level);
       const smoothed = smoothClosedPath(watch.points, 16);
       layer.append(el('path', {
         class: 'watch-zone-fill',

@@ -75,9 +75,12 @@
           <span class="map-legend__title">Category</span>
           <div class="map-legend__swatches" id="map-legend-category"></div>
         </div>
-        <div class="map-legend__group">
-          <span class="map-legend__title">Watch / warning</span>
-          <div class="map-legend__swatches" id="map-legend-watch"></div>
+        <div class="map-legend__group map-legend__group--watch">
+          <button type="button" class="map-legend__title map-legend__toggle"
+                  id="map-legend-watch-toggle" aria-expanded="false" aria-controls="map-legend-watch">
+            Watch / warning key <span class="map-legend__chevron" aria-hidden="true">▾</span>
+          </button>
+          <div class="map-legend__watch-grid" id="map-legend-watch"></div>
         </div>
       </div>
     </main>
