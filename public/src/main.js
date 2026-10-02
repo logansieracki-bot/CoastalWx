@@ -10,7 +10,7 @@
 // happened to make that mistake invisible).
 import {
   INITIAL_BOUNDS, systemColor, displayLabel, intensityScore, intensityCategoryKey,
-  categorySymbol, windOnlyIntensityScore, CATEGORY_INFO, maxFormationProbabilityPct,
+  categorySymbol, pointIntensityScore, CATEGORY_INFO, maxFormationProbabilityPct,
   PROBABILITY_COLORS, WATCH_LEVEL_COLORS, WATCH_LEVEL_LABELS, watchColor, watchProductLabel,
 } from '../editor/src/constants.js';
 import { createViewState, getAspectFittedBounds } from '../editor/src/viewState.js';
@@ -26,7 +26,8 @@ import { createWatchRenderer } from '../editor/src/watchRenderer.js';
 import { buildDisturbanceCalloutText, buildClassifiedCalloutText } from '../editor/src/discussionText.js';
 import { placeCallout } from '../editor/src/calloutPlacement.js';
 import { buildConeDisks } from '../editor/src/trackGeometry.js';
-import { exportSvgAsPng } from '../editor/src/imageExport.js';
+import { exportAdvisoryImage } from '../editor/src/advisoryImageExport.js';
+import { initTopbarNav } from './topbarNav.js';
 
 const POLL_INTERVAL_MS = 60000;
 
@@ -146,9 +147,11 @@ const activityTickerEl = document.getElementById('activity-ticker');
 const activityTickerTextEl = document.getElementById('activity-ticker-text');
 const liveStatusTextEl = document.getElementById('live-status-text');
 const systemListEl = document.getElementById('system-list');
+const systemListHandleEl = document.getElementById('system-list-handle');
 const discussionCalloutEl = document.getElementById('discussion-callout');
 const systemListEmptyEl = document.getElementById('system-list-empty');
 const sidebarOverviewEl = document.getElementById('sidebar-overview');
+const mapLegendEl = document.getElementById('map-legend');
 const mapLegendProbabilityEl = document.getElementById('map-legend-probability');
 const mapLegendCategoryEl = document.getElementById('map-legend-category');
 const mapLegendWatchEl = document.getElementById('map-legend-watch');
@@ -175,6 +178,7 @@ function animateNumber(el, target, duration = 600) {
 let systems = [];
 let advisories = [];
 let selectedId = null;
+let systemListExpanded = false; // mobile-only bottom-sheet state for #system-list (see styles.css's 760px block)
 let usingDemoData = false;
 let viewState = createViewState(INITIAL_BOUNDS);
 let mapRenderer = null;
@@ -184,6 +188,7 @@ let trackConeRenderer = null;
 let windFieldRenderer = null;
 let livePulseRenderer = null;
 let watchRenderer = null;
+let geography = null; // set once in init(); advisoryImageExport.js's map inset needs it long after init() returns
 
 async function loadGeography() {
   // Relative to the document (not this module) -- fetch() resolves against
@@ -251,7 +256,7 @@ function mapTrackPoints(rawPoints, system) {
     .sort((a, b) => a.sequence - b.sequence)
     .map((p) => ({
       id: p.id, lon: p.lon, lat: p.lat, hour: p.hour, spread: p.spreadMi,
-      symbol: categorySymbol(intensityCategoryKey(windOnlyIntensityScore(p.windMph))),
+      symbol: categorySymbol(intensityCategoryKey(pointIntensityScore(p.windMph, p.galeRadiusMi))),
     }));
   return [{ lon: system.lon, lat: system.lat, hour: 0, spread: 0 }, ...own];
 }
@@ -345,6 +350,18 @@ function collectObstacleRects(mapRect) {
         rects.push({ left: r.left - mapRect.left, top: r.top - mapRect.top, right: r.right - mapRect.left, bottom: r.bottom - mapRect.top });
       }
     }
+  }
+  // .map-legend lives outside the svg (a plain positioned div in
+  // .map-pane, not an SVG element) -- can't go through the selector loop
+  // above, which only ever queries inside svg. Added directly so
+  // placeCallout actively avoids it instead of the two only missing each
+  // other by coincidence.
+  const legendRect = mapLegendEl.getBoundingClientRect();
+  if (legendRect.width > 0 && legendRect.height > 0) {
+    rects.push({
+      left: legendRect.left - mapRect.left, top: legendRect.top - mapRect.top,
+      right: legendRect.right - mapRect.left, bottom: legendRect.bottom - mapRect.top,
+    });
   }
   return rects;
 }
@@ -464,18 +481,31 @@ function appendDownloadImageButton(wrap, system, view) {
   if (!view.published) return;
   const btn = document.createElement('button');
   btn.className = 'system-card__download';
-  btn.textContent = 'Download Map Image';
-  btn.title = 'Save the current map view as a PNG, to share outside CoastalWx.';
+  btn.textContent = 'Download Advisory Image';
+  btn.title = 'Save a shareable advisory card for this system as a PNG.';
   btn.addEventListener('click', async () => {
     try {
       const waterColor = getComputedStyle(document.documentElement).getPropertyValue('--water').trim();
       const safeName = displayLabel(system).replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-      await exportSvgAsPng(svg, {
-        fileName: `${safeName}-${new Date().toISOString().slice(0, 10)}.png`,
+      // view.system/.points/.annotations are the published advisory
+      // snapshot (view.published already guarantees one exists) -- never
+      // the live/possibly-unpublished `system` param, same "public only
+      // ever shows what's been published" rule the rest of this page
+      // follows. .annotations is used as-is, not through
+      // visibleAnnotationsFrom (which hides a classified system's shapes
+      // on the live map) -- this card shows track and shape together
+      // regardless, same as the editor's own export.
+      await exportAdvisoryImage({
+        system: view.system,
+        trackPoints: view.points,
+        annotations: view.annotations,
+        advisory: latestAdvisoryFor(system.id),
+        geography,
         backgroundColor: waterColor,
+        fileName: `${safeName}-advisory-${new Date().toISOString().slice(0, 10)}.png`,
       });
     } catch (err) {
-      alert(`Couldn't export the map image: ${err.message}`);
+      alert(`Couldn't export the advisory image: ${err.message}`);
     }
   });
   wrap.append(btn);
@@ -574,9 +604,20 @@ function cardTag(system, pub) {
   return tag;
 }
 
+// Mobile-only bottom-sheet toggle for #system-list -- see styles.css's
+// 760px block for the actual slide behavior (a CSS transform driven by
+// this one class). No-op on desktop, where #system-list has no such
+// styling at all and this class simply does nothing.
+function setSystemListExpanded(expanded) {
+  systemListExpanded = expanded;
+  systemListEl.classList.toggle('is-expanded', expanded);
+  systemListHandleEl.setAttribute('aria-expanded', String(expanded));
+}
+
 function renderSystemList() {
   systemListEl.querySelectorAll('.system-card').forEach((el) => el.remove());
   systemListEmptyEl.hidden = systems.length > 0;
+  systemListHandleEl.textContent = `${systems.length} active system${systems.length === 1 ? '' : 's'}`;
 
   for (const system of systems) {
     const card = document.createElement('article');
@@ -735,6 +776,10 @@ function renderLiveStatusBar() {
 
 function select(systemId, { scroll = false } = {}) {
   selectedId = systemId;
+  // Picking a system (or tapping the map outside the sheet, which also
+  // calls select(null) -- see the svg click handler below) always reveals
+  // the map behind the sheet, same "map-first" reasoning either way.
+  setSystemListExpanded(false);
   renderSystemList();
   renderMap();
   if (systemId && scroll) {
@@ -772,7 +817,7 @@ async function refresh() {
 }
 
 async function init() {
-  const geography = await loadGeography();
+  geography = await loadGeography();
   mapRenderer = createMapRenderer(svg, geography);
   watchRenderer = createWatchRenderer(svg);
   windFieldRenderer = createWindFieldRenderer(svg);
@@ -793,9 +838,13 @@ async function init() {
   window.addEventListener('resize', renderMap);
   renderMapLegend();
 
+  systemListHandleEl.addEventListener('click', () => setSystemListExpanded(!systemListExpanded));
+
   await refresh();
   setInterval(() => { refresh().catch((err) => console.error(err)); }, POLL_INTERVAL_MS);
 }
+
+initTopbarNav();
 
 init().catch((err) => {
   console.error(err);

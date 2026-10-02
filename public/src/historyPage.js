@@ -11,12 +11,12 @@ import {
   CATEGORY_INFO, categorySymbol, displayLabel, systemColor,
   intensityScore, intensityCategoryKey, maxFormationProbabilityPct,
 } from '../editor/src/constants.js';
-import { fitBoundsToAspect } from '../editor/src/geo.js';
+import { fitBoundsToAspect, boundsForPoints } from '../editor/src/geo.js';
 import { destinationPoint } from '../editor/src/windFieldGeometry.js';
 import { createMapRenderer } from '../editor/src/mapRenderer.js';
 import { createTrackHistoryRenderer } from './trackHistoryRenderer.js';
 import { createWindHistoryRenderer } from './windHistoryRenderer.js';
-import { formatPosition, computeMinPressure } from './stormStats.js';
+import { formatPosition, computeMinPressure, readableTextColor, formatCountdown } from '../editor/src/stormStats.js';
 
 const CATEGORY_ORDER = ['ed', 'ets', 'cat1', 'cat2', 'cat3', 'cat4', 'cat5'];
 
@@ -153,28 +153,6 @@ export function createHistoryPage({ loadData, includeSystem }) {
       }
     }
     return points;
-  }
-
-  // `fallbackCenter`: a not-yet-Formed system can have zero points (see
-  // formedEntriesFor) -- frame the map on its live lon/lat anyway (just
-  // camera framing, not a plotted position) rather than collapsing to
-  // Infinity/-Infinity and producing NaN bounds.
-  function boundsForPoints(points, fallbackCenter) {
-    if (points.length === 0 && fallbackCenter) points = [fallbackCenter];
-    let west = Infinity, east = -Infinity, south = Infinity, north = -Infinity;
-    for (const p of points) {
-      west = Math.min(west, p.lon); east = Math.max(east, p.lon);
-      south = Math.min(south, p.lat); north = Math.max(north, p.lat);
-    }
-    // A minimum span so a 1-2 point track (freshly classified, one
-    // advisory) still frames as a readable map, not an extreme close-up.
-    const lonSpan = Math.max(6, east - west);
-    const latSpan = Math.max(6, north - south);
-    const cx = (west + east) / 2;
-    const cy = (south + north) / 2;
-    const padLon = lonSpan * 0.65;
-    const padLat = latSpan * 0.65;
-    return { west: cx - padLon, east: cx + padLon, south: cy - padLat, north: cy + padLat };
   }
 
   const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -341,21 +319,6 @@ export function createHistoryPage({ loadData, includeSystem }) {
     return parts.length ? parts.join(' · ') : '—';
   }
 
-  // White text on a dark category/probability color, dark text on a light
-  // one -- the palette spans from pale gray-blue through near-black purple,
-  // so a single fixed text color would be unreadable against roughly half
-  // of it. Simple perceived-luminance heuristic, not full WCAG contrast math
-  // -- this only ever has ~11 fixed palette colors to work with, verified by
-  // hand against all of them rather than needing to be exact for arbitrary input.
-  function readableTextColor(hex) {
-    const c = hex.replace('#', '');
-    const r = parseInt(c.substring(0, 2), 16);
-    const g = parseInt(c.substring(2, 4), 16);
-    const b = parseInt(c.substring(4, 6), 16);
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    return luminance > 0.5 ? '#0a1628' : '#ffffff';
-  }
-
   function panelRow(label, value) {
     const row = document.createElement('div');
     row.className = 'storm-panel__row';
@@ -367,15 +330,6 @@ export function createHistoryPage({ loadData, includeSystem }) {
     v.textContent = value;
     row.append(l, v);
     return row;
-  }
-
-  function formatCountdown(targetMs) {
-    const deltaMs = targetMs - Date.now();
-    if (deltaMs <= 0) return 'Overdue';
-    const totalMinutes = Math.round(deltaMs / 60000);
-    const h = Math.floor(totalMinutes / 60);
-    const m = totalMinutes % 60;
-    return h > 0 ? `${h}h ${m}m` : `${m}m`;
   }
 
   // The reference "TROPICAL STORM HANNA" card, adapted to this app's own

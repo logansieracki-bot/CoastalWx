@@ -51,39 +51,45 @@ export const CATEGORY_INFO = {
   cat5: { label: 'Category 5', color: '#5c2160' },
 };
 
-// Score = [(V-35) + 0.25*(G-40)] * sqrt(R/300) + 0.5*(1010-p)
+// Score = [(V-30) + 0.15*(G-45)] * min(1, sqrt(R/400)) + 0.5*(1010-p)
 // V=sustained wind mph, G=max gust mph, R=gale-radius miles, p=central mb.
 // Wind, gust, and pressure points are all floored at 0 -- a weak wind, weak
-// gust, or high pressure contributes nothing rather than subtracting.
+// gust, or high pressure contributes nothing rather than subtracting. Size
+// factor is capped at 1 -- an oversized wind field earns no bonus credit
+// beyond the system's own wind+gust contribution, it just stops suppressing
+// it (see windFieldRenderer.js's wind-radius editor for how R is set).
 export function intensityScore({ windMph, gustMph, galeRadiusMi, pressureMb }) {
   if ([windMph, gustMph, galeRadiusMi, pressureMb].some((v) => typeof v !== 'number')) return null;
-  const windPoints = Math.max(0, windMph - 35);
-  const gustPoints = Math.max(0, 0.25 * (gustMph - 40));
-  const sizeFactor = Math.sqrt(galeRadiusMi / 300);
+  const windPoints = Math.max(0, windMph - 30);
+  const gustPoints = Math.max(0, 0.15 * (gustMph - 45));
+  const sizeFactor = Math.min(1, Math.sqrt(galeRadiusMi / 400));
   const pressurePoints = Math.max(0, 0.5 * (1010 - pressureMb));
   return (windPoints + gustPoints) * sizeFactor + pressurePoints;
 }
 
-// A forecast point only ever has a forecast wind, never a full reading
-// (gust/gale-radius/pressure), so its own intensity symbol can't reuse
-// intensityScore() itself -- it uses just that formula's wind term (the
-// same "points above 35 mph, floored at 0" the system-level score also
-// starts from), scored against the same category thresholds. This is
-// deliberately NOT the system's current gust/radius/pressure plugged in
-// alongside the point's forecast wind -- a point's symbol reflects its
-// own forecast wind alone, not a mix of forecast and present conditions.
-export function windOnlyIntensityScore(windMph) {
+// A forecast point's own intensity symbol: wind alone (same "points above
+// 30 mph, floored at 0" term intensityScore() starts from) once it has no
+// radius data yet, scaled down by the same capped size factor once it does
+// (see editor/src/windFieldRenderer.js's createPointWindFieldRenderer).
+// Deliberately NOT the system's own current gust/pressure plugged in
+// alongside the point's forecast wind -- a point's symbol reflects its own
+// forecast wind (and, once set, its own forecast radius) alone, not a mix
+// of forecast and present conditions.
+export function pointIntensityScore(windMph, galeRadiusMi) {
   if (typeof windMph !== 'number') return null;
-  return Math.max(0, windMph - 35);
+  const windPoints = Math.max(0, windMph - 30);
+  if (typeof galeRadiusMi !== 'number') return windPoints;
+  const sizeFactor = Math.min(1, Math.sqrt(galeRadiusMi / 400));
+  return windPoints * sizeFactor;
 }
 
 export function intensityCategoryKey(score) {
   if (typeof score !== 'number') return null;
-  if (score < 10) return 'ed';
+  if (score < 9) return 'ed';
   if (score < 20) return 'ets';
-  if (score < 40) return 'cat1';
-  if (score < 65) return 'cat2';
-  if (score < 100) return 'cat3';
+  if (score < 45) return 'cat1';
+  if (score < 72) return 'cat2';
+  if (score < 108) return 'cat3';
   if (score < 150) return 'cat4';
   return 'cat5';
 }

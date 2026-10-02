@@ -1,6 +1,6 @@
 import {
   INITIAL_BOUNDS, maxFormationProbabilityPct, systemColor, displayLabel,
-  intensityScore, intensityCategoryKey, categorySymbol, windOnlyIntensityScore, CATEGORY_INFO, defaultSpreadForHour,
+  intensityScore, intensityCategoryKey, categorySymbol, pointIntensityScore, CATEGORY_INFO, defaultSpreadForHour,
   WATCH_LEVEL_LABELS, WATCH_PRODUCTS,
 } from './constants.js';
 import { createViewState, getAspectFittedBounds, resetView } from './viewState.js';
@@ -10,14 +10,14 @@ import { createPointRenderer } from './pointRenderer.js';
 import { createAnnotationRenderer } from './annotationRenderer.js';
 import { createTrackConeRenderer } from './trackConeRenderer.js';
 import { createSpreadEditor } from './spreadEditor.js';
-import { createWindFieldRenderer } from './windFieldRenderer.js';
+import { createWindFieldRenderer, createPointWindFieldRenderer } from './windFieldRenderer.js';
 import { milesBetween, buildConeDisks } from './trackGeometry.js';
 import { VALID_INTERVALS, nextForecastHour, recomputeForecastHours } from './forecastSchedule.js';
 import { projectLonLat } from './geo.js';
 import { api, detectBackend } from './api.js';
 import { buildDisturbanceCalloutText, buildClassifiedCalloutText } from './discussionText.js';
 import { placeCallout } from './calloutPlacement.js';
-import { exportSvgAsPng } from './imageExport.js';
+import { exportAdvisoryImage } from './advisoryImageExport.js';
 import { createWatchRenderer } from './watchRenderer.js';
 
 const svg = document.getElementById('map');
@@ -82,6 +82,7 @@ let advisories = [];
 let scheduledAdvisories = [];
 let watches = [];
 let activeWindThreshold = 'gale'; // 'gale' | 'hfw' -- which quadrant handles are shown/draggable
+let pointWindFieldActive = false; // whether selectedForecastPointId's own gale wind-field handles are shown/draggable
 let drawingSession = null; // { systemId, type: 'shape'|'arrow', points: [{lon,lat}] } | null
 // Set by the Watches section's "Add zone" button, alongside setTool('shape')
 // -- consumed the moment a drawing session actually starts (tagging it as a
@@ -98,7 +99,9 @@ let annotationRenderer = null;
 let trackConeRenderer = null;
 let spreadEditor = null;
 let windFieldRenderer = null;
+let pointWindFieldRenderer = null;
 let watchRenderer = null;
+let geography = null; // set once in init(); advisoryImageExport.js's map inset needs it long after init() returns
 
 async function loadGeography() {
   const [land, lakes, borders, states] = await Promise.all(
@@ -126,7 +129,7 @@ function selectedSystemTrackPoints() {
     .sort((a, b) => a.sequence - b.sequence)
     .map((p) => ({
       id: p.id, lon: p.lon, lat: p.lat, hour: p.hour, spread: p.spreadMi,
-      symbol: categorySymbol(intensityCategoryKey(windOnlyIntensityScore(p.windMph))),
+      symbol: categorySymbol(intensityCategoryKey(pointIntensityScore(p.windMph, p.galeRadiusMi))),
     }));
   return [{ lon: system.lon, lat: system.lat, hour: 0, spread: 0 }, ...own];
 }
@@ -257,6 +260,7 @@ function renderMap() {
   windFieldRenderer.render({ system: systems.find((s) => s.id === selectedId) ?? null, activeThreshold: activeWindThreshold, bounds, width: rect.width, height: rect.height });
   annotationRenderer.render({ annotations: visibleAnnotations(), selectedAnnotationId, draft: drawingSession, systems, bounds, width: rect.width, height: rect.height });
   pointRenderer.render({ systems, selectedId, bounds, width: rect.width, height: rect.height });
+  pointWindFieldRenderer.render({ point: selectedForecastPoint(), active: pointWindFieldActive, bounds, width: rect.width, height: rect.height });
   renderDiscussionCallout();
   spreadEditor.render({ point: selectedForecastPoint(), bounds, width: rect.width, height: rect.height });
 }
@@ -417,6 +421,7 @@ function select(systemId) {
   selectedId = systemId;
   selectedAnnotationId = null;
   selectedForecastPointId = null;
+  pointWindFieldActive = false;
   if (selectedId === null && (tool === 'shape' || tool === 'arrow' || tool === 'add-forecast-point')) {
     setTool('select'); // can't stay in a tool with no owning system
   }
@@ -438,6 +443,7 @@ function selectAnnotation(annotation) {
 }
 
 function selectForecastPoint(point) {
+  if (selectedForecastPointId !== point.id) pointWindFieldActive = false;
   selectedForecastPointId = point.id;
   renderSidebar();
   renderMap();
@@ -818,19 +824,43 @@ function renderForecastTrackSection(system) {
       renderMap();
     });
 
+    // Toggles this point's own gale-force wind-radius handles on the map
+    // (editorLayer only -- the fill always renders once any quadrant is
+    // set, same as the system-level field). Feeds pointIntensityScore's
+    // size factor, not the cone's spread/geometry -- that's still spreadMi
+    // alone, edited via the separate drag handle on the map itself.
+    const windRadiusBtn = document.createElement('button');
+    const isEditingThisPoint = pointWindFieldActive && selectedForecastPointId === point.id;
+    windRadiusBtn.textContent = isEditingThisPoint ? 'Done editing wind radius' : 'Edit wind radius';
+    windRadiusBtn.className = isEditingThisPoint ? 'is-active' : '';
+    windRadiusBtn.title = 'Show/hide this point\'s own gale-force wind-field handles on the map';
+    windRadiusBtn.addEventListener('click', () => {
+      if (isEditingThisPoint) {
+        pointWindFieldActive = false;
+      } else {
+        selectedForecastPointId = point.id;
+        pointWindFieldActive = true;
+      }
+      renderSidebar();
+      renderMap();
+    });
+
     const deleteBtn = document.createElement('button');
     deleteBtn.textContent = 'Delete';
     deleteBtn.className = 'danger';
     deleteBtn.addEventListener('click', async () => {
       await api.deleteForecastPoint(point.id);
       forecastPoints = forecastPoints.filter((p) => p.id !== point.id);
-      if (selectedForecastPointId === point.id) selectedForecastPointId = null;
+      if (selectedForecastPointId === point.id) {
+        selectedForecastPointId = null;
+        pointWindFieldActive = false;
+      }
       await syncForecastSchedule(system);
       renderSidebar();
       renderMap();
     });
 
-    row.append(label, modeSelect, hourInput, windInput, spreadInput, statusSelect, saveBtn, deleteBtn);
+    row.append(label, modeSelect, hourInput, windInput, spreadInput, statusSelect, saveBtn, windRadiusBtn, deleteBtn);
     wrap.append(row);
   }
 
@@ -1110,17 +1140,17 @@ function renderIntensitySection(system) {
     <ul>
       <li>Has a closed circulation that has persisted 12+ hours</li>
       <li>Shows extratropical structure (temperature contrast, usually attached fronts)</li>
-      <li>Produces gale-force sustained winds (39 mph+) somewhere in its circulation</li>
+      <li>Produces sustained winds of 30 mph+ somewhere in its circulation</li>
       <li>Has a central pressure roughly 8 mb+ below its surroundings</li>
     </ul>
-    <p><strong>Score</strong> = [(wind − 35) + 0.25 × (gust − 40)] × √(radius ÷ 300) + 0.5 × (1010 − pressure)</p>
+    <p><strong>Score</strong> = [(wind − 30) + 0.15 × (gust − 45)] × min(1, √(radius ÷ 400)) + 0.5 × (1010 − pressure)</p>
     <ul>
-      <li>Under 10: Extratropical Depression</li>
-      <li>10–19: Extratropical Storm</li>
-      <li>20–39: Category 1</li>
-      <li>40–64: Category 2</li>
-      <li>65–99: Category 3</li>
-      <li>100–149: Category 4</li>
+      <li>Under 9: Extratropical Depression</li>
+      <li>9–19: Extratropical Storm</li>
+      <li>20–44: Category 1</li>
+      <li>45–71: Category 2</li>
+      <li>72–107: Category 3</li>
+      <li>108–149: Category 4</li>
       <li>150+: Category 5</li>
     </ul>
   `;
@@ -1141,7 +1171,7 @@ function renderIntensitySection(system) {
     classifyBtn.addEventListener('click', async () => {
       const key = intensityCategoryKey(intensityScore(system));
       const label = key ? CATEGORY_INFO[key].label : 'a category';
-      if (!confirm(`Classify ${displayLabel(system)} as an extratropical cyclone (${label})? Confirm it has a closed circulation (12+ hrs), extratropical structure, gale-force winds, and a meaningful pressure gradient below its surroundings. This cannot be undone.`)) return;
+      if (!confirm(`Classify ${displayLabel(system)} as an extratropical cyclone (${label})? Confirm it has a closed circulation (12+ hrs), extratropical structure, winds of 30 mph+, and a meaningful pressure gradient below its surroundings. This cannot be undone.`)) return;
       const updated = await api.updateSystem(system.id, { classified: true });
       systems = systems.map((s) => (s.id === updated.id ? updated : s));
       select(updated.id);
@@ -1169,18 +1199,23 @@ function renderSelectedPanel() {
   selectedPanelEl.append(meta);
 
   const downloadImageBtn = document.createElement('button');
-  downloadImageBtn.textContent = 'Download Map Image';
-  downloadImageBtn.title = 'Save the current map view as a PNG, to share outside the app.';
+  downloadImageBtn.textContent = 'Download Advisory Image';
+  downloadImageBtn.title = 'Save a shareable advisory card for this system as a PNG -- auto-framed on its own track/cone, not your current pan/zoom.';
   downloadImageBtn.addEventListener('click', async () => {
     try {
       const waterColor = getComputedStyle(document.documentElement).getPropertyValue('--water-color').trim();
       const safeName = displayLabel(system).replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-      await exportSvgAsPng(svg, {
-        fileName: `${safeName}-${new Date().toISOString().slice(0, 10)}.png`,
+      await exportAdvisoryImage({
+        system,
+        trackPoints: selectedSystemTrackPoints(),
+        annotations: annotations.filter((a) => a.systemId === system.id),
+        advisory: latestAdvisoryFor(system.id),
+        geography,
         backgroundColor: waterColor,
+        fileName: `${safeName}-advisory-${new Date().toISOString().slice(0, 10)}.png`,
       });
     } catch (err) {
-      alert(`Couldn't export the map image: ${err.message}`);
+      alert(`Couldn't export the advisory image: ${err.message}`);
     }
   });
   selectedPanelEl.append(downloadImageBtn);
@@ -1393,6 +1428,11 @@ function windRadiusFieldKey(threshold, quadrant) {
   return `${prefix}${quadrant[0].toUpperCase()}${quadrant.slice(1)}Mi`;
 }
 
+// Same mapping, gale-only -- a forecast point has no hurricane-force pair.
+function pointWindRadiusFieldKey(quadrant) {
+  return `galeRadius${quadrant[0].toUpperCase()}${quadrant.slice(1)}Mi`;
+}
+
 // Owns click-to-select/deselect/place, drag-to-move-a-point, drag-to-move-
 // an-annotation-vertex, click-to-select/insert-vertex on an annotation, and
 // the shape/arrow drawing-session clicks. Pure panning on blank map space is
@@ -1422,6 +1462,7 @@ function setupPointerHandling() {
     // them.
     event.preventDefault();
     const spreadHandleHit = event.target.closest?.('[data-spread-handle]');
+    const pointWindHandleHit = event.target.closest?.('[data-point-wind-handle]');
     const windHandleHit = event.target.closest?.('[data-wind-handle]');
     const vertexHit = event.target.closest?.('[data-vertex-index]');
     const annotationHit = event.target.closest?.('[data-annotation-id]');
@@ -1430,6 +1471,14 @@ function setupPointerHandling() {
 
     if (spreadHandleHit && selectedForecastPointId) {
       gesture = { kind: 'spread', pointId: selectedForecastPointId, downX: event.clientX, downY: event.clientY };
+      svg.setPointerCapture?.(event.pointerId);
+    } else if (pointWindHandleHit && selectedForecastPointId) {
+      gesture = {
+        kind: 'point-wind-handle',
+        pointId: selectedForecastPointId,
+        quadrant: pointWindHandleHit.dataset.quadrant,
+        downX: event.clientX, downY: event.clientY, moved: false,
+      };
       svg.setPointerCapture?.(event.pointerId);
     } else if (windHandleHit) {
       gesture = {
@@ -1518,6 +1567,18 @@ function setupPointerHandling() {
       renderMap();
       return;
     }
+    if (gesture?.kind === 'point-wind-handle') {
+      const dist = Math.hypot(event.clientX - gesture.downX, event.clientY - gesture.downY);
+      if (dist <= 4) return;
+      gesture.moved = true;
+      const point = forecastPoints.find((p) => p.id === gesture.pointId);
+      if (!point) return;
+      const geo = geoAtClient(event, svg.getBoundingClientRect());
+      const key = pointWindRadiusFieldKey(gesture.quadrant);
+      point[key] = Math.round(Math.min(1500, Math.max(0, milesBetween(point, geo))));
+      renderMap();
+      return;
+    }
   });
 
   svg.addEventListener('pointerup', async (event) => {
@@ -1598,6 +1659,18 @@ function setupPointerHandling() {
       return; // a plain click on the handle (no drag) is a no-op
     }
 
+    if (current.kind === 'point-wind-handle') {
+      const point = forecastPoints.find((p) => p.id === current.pointId);
+      if (current.moved && point) {
+        const key = pointWindRadiusFieldKey(current.quadrant);
+        const updated = await api.updateForecastPoint(point.id, { [key]: point[key] });
+        forecastPoints = forecastPoints.map((p) => (p.id === updated.id ? updated : p));
+        renderSidebar();
+        renderMap();
+      }
+      return; // a plain click on the handle (no drag) is a no-op
+    }
+
     // Blank space: a real drag here was a pan (navigation.js already moved
     // the camera) -- only act on it if it was a plain click.
     const dist = Math.hypot(event.clientX - current.downX, event.clientY - current.downY);
@@ -1616,7 +1689,7 @@ function setupPointerHandling() {
 }
 
 async function init() {
-  const geography = await loadGeography();
+  geography = await loadGeography();
   mapRenderer = createMapRenderer(svg, geography);
   // Broadest, most "background" non-basemap layer -- a hazard zone fill
   // sits under the selected system's own wind field and every system's
@@ -1627,14 +1700,17 @@ async function init() {
   // immediately) so the forecast cone reads as the topmost map-level
   // shape rather than getting washed out by a translucent wind field.
   windFieldRenderer = createWindFieldRenderer(svg);
-  svg.append(windFieldRenderer.fieldLayer);
+  pointWindFieldRenderer = createPointWindFieldRenderer(svg);
+  svg.append(windFieldRenderer.fieldLayer, pointWindFieldRenderer.fieldLayer);
   trackConeRenderer = createTrackConeRenderer(svg);
   annotationRenderer = createAnnotationRenderer(svg);
   pointRenderer = createPointRenderer(svg);
   // windFieldRenderer's handles are appended here, after pointRenderer --
   // see windFieldRenderer.js's own comment: they need to paint on top of
   // the system's marker/label so a handle near either always wins clicks.
-  svg.append(windFieldRenderer.editorLayer);
+  // pointWindFieldRenderer's handles follow the same reasoning, scoped to
+  // the selected forecast point's own marker instead.
+  svg.append(windFieldRenderer.editorLayer, pointWindFieldRenderer.editorLayer);
   spreadEditor = createSpreadEditor(svg);
 
   attachNavigation({
@@ -1652,7 +1728,8 @@ async function init() {
       !event.target.closest?.('[data-vertex-index]') &&
       !event.target.closest?.('[data-forecast-point-id]') &&
       !event.target.closest?.('[data-spread-handle]') &&
-      !event.target.closest?.('[data-wind-handle]'),
+      !event.target.closest?.('[data-wind-handle]') &&
+      !event.target.closest?.('[data-point-wind-handle]'),
   });
 
   setupPointerHandling();

@@ -8,7 +8,6 @@
 // didn't need correcting, just carrying over as a new field this app
 // didn't previously track).
 import { buildWindEnvelope, destinationPoint } from './windFieldGeometry.js';
-import { MILES_PER_DEGREE_LAT } from './constants.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const QUADRANT_BEARINGS = { ne: 45, se: 135, sw: 225, nw: 315 };
@@ -43,12 +42,35 @@ export function windEnvelopePathData(center, radii, samples = 96) {
   return `M${token(coords[0])}` + coords.slice(1).map((p) => `L${token(p)}`).join('') + 'Z';
 }
 
-export function windHandleCoordinates(center, radii) {
+export function windHandleCoordinates(center, radii, minScreenDeg = 0) {
   const out = {};
   for (const [quadrant, bearing] of Object.entries(QUADRANT_BEARINGS)) {
-    out[quadrant] = destinationPoint(center, bearing, Math.max(0, Number(radii?.[quadrant]) || 0));
+    const point = destinationPoint(center, bearing, Math.max(0, Number(radii?.[quadrant]) || 0));
+    out[quadrant] = nudgeTowardMinScreenDistance(center, point, bearing, minScreenDeg);
   }
   return out;
+}
+
+// Purely a visual grab-target floor for near-zero radii: nudges `point`
+// outward from `center` along `bearingDeg`, but only if it would otherwise
+// render closer than `minScreenDeg` -- measured in the same raw lon/lat-
+// degree units the map's own flat projection already uses for screen
+// position (see geo.js's projectLonLat, which maps lon/lat to pixels
+// linearly with no latitude correction), so this stays consistent with how
+// everything else on the map is actually drawn, with no mile conversion
+// (and no latitude-dependent distortion from one) involved. A point
+// that's already far enough away renders at its exact, undistorted
+// position -- unlike the old minHandleMiles floor this replaces, which
+// inflated the real-world-mile value fed into destinationPoint's geodesic
+// math, freezing the handle at one fixed screen spot for every true value
+// below a zoom-dependent (and, when zoomed out, potentially huge) mile
+// threshold.
+function nudgeTowardMinScreenDistance(center, point, bearingDeg, minScreenDeg) {
+  const dLon = point.lon - center.lon;
+  const dLat = point.lat - center.lat;
+  if (Math.hypot(dLon, dLat) >= minScreenDeg) return point;
+  const rad = (bearingDeg * Math.PI) / 180;
+  return { lon: center.lon + Math.sin(rad) * minScreenDeg, lat: center.lat + Math.cos(rad) * minScreenDeg };
 }
 
 // Unlike this project's other renderers, the two layers are NOT both
@@ -93,14 +115,9 @@ export function createWindFieldRenderer(svg) {
     // appended after pointRenderer -- see the comment on this factory) so
     // this offset is purely for visual/grab clarity, same reasoning as
     // spreadEditor's own handleRx minimum, just applied to all 4 bearings
-    // instead of one.
-    // handle sits due east, off the X's diagonals entirely.
-    const minHandleMiles = unit * 22 * MILES_PER_DEGREE_LAT;
-    const displayRadii = {};
-    for (const quadrant of ['ne', 'se', 'sw', 'nw']) {
-      displayRadii[quadrant] = Math.max(Number(radii[quadrant]) || 0, minHandleMiles);
-    }
-    const handles = windHandleCoordinates(center, displayRadii);
+    // instead of one -- see windHandleCoordinates' own nudge for why this
+    // no longer distorts the *value* a handle is positioned at.
+    const handles = windHandleCoordinates(center, radii, unit * 22);
 
     for (const quadrant of ['ne', 'se', 'sw', 'nw']) {
       const handle = handles[quadrant];
@@ -115,6 +132,64 @@ export function createWindFieldRenderer(svg) {
       }));
       // Live "Xmi" readout next to each handle, so the forecaster can see
       // the exact radius without having to judge it from the shape alone.
+      const miles = Math.round(Math.max(0, Number(radii[quadrant]) || 0));
+      const helper = el('text', {
+        class: 'wind-handle-label',
+        x: handle.lon, y: -handle.lat,
+        'text-anchor': 'middle', 'dominant-baseline': 'central',
+        'font-size': unit * 9,
+      });
+      helper.textContent = `${miles}mi`;
+      editorLayer.append(helper);
+    }
+  }
+
+  return { render, fieldLayer, editorLayer };
+}
+
+// Same shape as createWindFieldRenderer above, scoped to a single selected
+// forecast point instead of the selected system, and gale-only (a point
+// has no hurricane-force pair -- see constants.js's pointIntensityScore,
+// the only thing this data feeds). Reuses this file's own module-scoped
+// helpers rather than duplicating them, same z-order split as above (fill
+// under markers, handles on top -- see this factory's own caller in
+// main.js's init() for the append order).
+export function createPointWindFieldRenderer(svg) {
+  const fieldLayer = el('g', { id: 'point-wind-field-fill-layer' });
+  const editorLayer = el('g', { id: 'point-wind-field-editor-layer' });
+
+  // `point` null/undefined or `active` false -> nothing shown, clears and
+  // returns. The fill still renders whenever the point has any radius set,
+  // regardless of `active` -- same as the system-level fields always
+  // rendering regardless of activeThreshold -- only the draggable handles
+  // are gated on `active`.
+  function render({ point, active, bounds, width, height }) {
+    fieldLayer.replaceChildren();
+    editorLayer.replaceChildren();
+    if (!point || !bounds) return;
+
+    const center = { lon: point.lon, lat: point.lat };
+    const radii = { ne: point.galeRadiusNeMi, se: point.galeRadiusSeMi, sw: point.galeRadiusSwMi, nw: point.galeRadiusNwMi };
+
+    const galeD = windEnvelopePathData(center, radii);
+    if (galeD) fieldLayer.append(el('path', { class: 'wind-field wind-field-gale', d: galeD }));
+
+    if (!active) return;
+    const unit = screenUnit(bounds, width, height);
+    const handleRadius = unit * 6.5;
+    const handles = windHandleCoordinates(center, radii, unit * 22);
+
+    for (const quadrant of ['ne', 'se', 'sw', 'nw']) {
+      const handle = handles[quadrant];
+      editorLayer.append(el('line', {
+        class: 'wind-guide',
+        x1: center.lon, y1: -center.lat, x2: handle.lon, y2: -handle.lat,
+      }));
+      editorLayer.append(el('circle', {
+        class: 'wind-handle wind-handle-gale',
+        'data-point-wind-handle': 'true', 'data-quadrant': quadrant,
+        cx: handle.lon, cy: -handle.lat, r: handleRadius,
+      }));
       const miles = Math.round(Math.max(0, Number(radii[quadrant]) || 0));
       const helper = el('text', {
         class: 'wind-handle-label',

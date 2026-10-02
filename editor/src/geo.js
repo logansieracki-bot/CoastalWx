@@ -38,6 +38,29 @@ export function fitBoundsToAspect(bounds, viewportAspect) {
   return { west, east, south, north };
 }
 
+// `fallbackCenter`: a point set that's empty (e.g. a not-yet-Formed system)
+// frames the map on that center anyway (just camera framing, not a plotted
+// position) rather than collapsing to Infinity/-Infinity and producing NaN
+// bounds.
+export function boundsForPoints(points, fallbackCenter) {
+  if (points.length === 0 && fallbackCenter) points = [fallbackCenter];
+  let west = Infinity, east = -Infinity, south = Infinity, north = -Infinity;
+  for (const p of points) {
+    west = Math.min(west, p.lon); east = Math.max(east, p.lon);
+    south = Math.min(south, p.lat); north = Math.max(north, p.lat);
+  }
+  // A minimum span so a 1-2 point track (freshly classified, one advisory,
+  // or a single-system image export) still frames as a readable map, not
+  // an extreme close-up.
+  const lonSpan = Math.max(6, east - west);
+  const latSpan = Math.max(6, north - south);
+  const cx = (west + east) / 2;
+  const cy = (south + north) / 2;
+  const padLon = lonSpan * 0.65;
+  const padLat = latSpan * 0.65;
+  return { west: cx - padLon, east: cx + padLon, south: cy - padLat, north: cy + padLat };
+}
+
 export function unprojectXY(x, y, bounds, width, height) {
   const lonSpan = bounds.east - bounds.west;
   const latSpan = bounds.north - bounds.south;

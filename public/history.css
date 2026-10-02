@@ -177,5 +177,41 @@
      pressure would land here instead), collapsing it to a sliver that
      .storm-panel's own overflow:hidden then clips to invisible. */
   .storm-panel { position: static; width: auto; margin: 0 12px; flex-shrink: 0; }
-  .history-chart-surface { position: relative; flex: 1; min-height: 300px; }
+  /* .history-chart-tabs was the other absolutely-positioned layer pinned
+     to this same top corner strip as .storm-panel (see the comment above
+     this block) -- completes the same fix by dropping it into normal
+     flow too, directly below the now-stacked panel, instead of leaving it
+     floating over a surface that's much narrower here than on desktop.
+     Stays a child of .history-chart-surface (point-popup's own
+     positioning math keys off that element's rect, so nothing here is
+     safe to move out of it in the DOM) -- a flex column on the surface
+     itself achieves the same "tabs above, chart fills the rest" result
+     purely in CSS, no restructuring needed. .history-legend and
+     .point-popup are untouched (still position:absolute) -- confirmed via
+     live testing that the legend's existing small, narrow-column
+     treatment already reads fine at phone width once the tabs/panel
+     collision above it is resolved -- see this change's own verification
+     pass for the live-width check that confirmed this. */
+  .history-chart-surface {
+    position: relative; display: flex; flex-direction: column;
+    flex: 1; min-height: 300px;
+  }
+  #history-chart { order: 2; flex: 1; width: 100%; height: auto; }
+  .history-chart-tabs {
+    order: 1; position: static; align-self: stretch;
+    margin: 0 0 10px; display: flex;
+  }
+  .history-chart-tab { flex: 1; text-align: center; padding: 10px 12px; }
+}
+
+/* Small-phone tightening -- same 480px tier as styles.css's own pass,
+   covering this page's own stat-heavy panel (flagged during the mobile
+   audit as a plausible tight fit at 23px hero numbers, not confirmed
+   until this pass's live check). */
+@media (max-width: 480px) {
+  .storm-panel__name { font-size: 17px; }
+  .storm-panel__hero-value { font-size: 19px; }
+  .storm-panel__hero-stat { padding: 8px 10px; }
+  .history-stat { padding: 10px 12px; }
+  .history-stat__value { font-size: 15px; }
 }

@@ -146,6 +146,11 @@ function forecastPointToApi(row) {
     windMph: row.windMph ?? null, spreadMi: row.spreadMi ?? 0,
     hourMode: row.hourMode ?? 'auto', hourOverride: row.hourOverride ?? null,
     status: row.status ?? null,
+    galeRadiusNeMi: row.galeRadiusNeMi ?? null,
+    galeRadiusSeMi: row.galeRadiusSeMi ?? null,
+    galeRadiusSwMi: row.galeRadiusSwMi ?? null,
+    galeRadiusNwMi: row.galeRadiusNwMi ?? null,
+    galeRadiusMi: averageRadius(row.galeRadiusNeMi, row.galeRadiusSeMi, row.galeRadiusSwMi, row.galeRadiusNwMi),
     createdAt: row.createdAt, updatedAt: row.updatedAt,
   };
 }

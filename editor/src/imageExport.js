@@ -1,7 +1,7 @@
-// Exports the live map SVG as a downloadable PNG. Shared by both the
-// editor and the public page (same relative-import convention every
-// other shared renderer here already uses, so it survives the GitHub
-// Pages path-prefixed deployment too).
+// Exports an SVG map to a downloadable PNG. Shared by both the editor and
+// the public page (same relative-import convention every other shared
+// renderer here already uses, so it survives the GitHub Pages path-
+// prefixed deployment too).
 //
 // The map's fills/strokes/fonts mostly come from CSS classes, not
 // presentation attributes (see annotationRenderer.js's own comment on
@@ -40,7 +40,11 @@ function inlineComputedStyle(original, clone) {
   clone.style.setProperty('font-family', EXPORT_FONT_STACK);
 }
 
-function cloneWithInlinedStyles(svgEl) {
+// Exported so advisoryImageExport.js can reuse this same style-inlining
+// pass on its own temporary, off-screen SVG -- that SVG is never the live
+// `#map` element, but the same "classes won't survive serialization"
+// problem applies to any detached clone equally.
+export function cloneWithInlinedStyles(svgEl) {
   const clone = svgEl.cloneNode(true);
   inlineComputedStyle(svgEl, clone);
   const originals = svgEl.querySelectorAll('*');
@@ -49,6 +53,53 @@ function cloneWithInlinedStyles(svgEl) {
     inlineComputedStyle(originals[i], clones[i]);
   }
   return clone;
+}
+
+// Rasterizes `svgEl` at `width`x`height` CSS pixels into a loaded <img>,
+// via the same inline-styles-then-serialize-then-load approach
+// exportSvgAsPng always used internally -- extracted so
+// advisoryImageExport.js can rasterize its own temporary SVG without
+// duplicating this (object-URL lifecycle included: the SVG blob URL is
+// always revoked before this resolves or rejects, win or lose).
+export async function rasterizeSvgToImage(svgEl, width, height) {
+  const clone = cloneWithInlinedStyles(svgEl);
+  clone.setAttribute('xmlns', SVG_NS);
+  clone.setAttribute('width', String(width));
+  clone.setAttribute('height', String(height));
+
+  const svgUrl = URL.createObjectURL(new Blob(
+    [new XMLSerializer().serializeToString(clone)],
+    { type: 'image/svg+xml;charset=utf-8' }
+  ));
+  try {
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Failed to rasterize the map.'));
+      img.src = svgUrl;
+    });
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+}
+
+// Encodes `canvas` as a PNG and triggers a browser download -- extracted
+// so advisoryImageExport.js can download its own composited canvas (map
+// inset + stat card) through the same tested path exportSvgAsPng already
+// used internally.
+export async function downloadCanvasAsPng(canvas, fileName) {
+  const pngBlob = await new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Failed to encode PNG.'))), 'image/png');
+  });
+  const pngUrl = URL.createObjectURL(pngBlob);
+  try {
+    const a = document.createElement('a');
+    a.href = pngUrl;
+    a.download = fileName;
+    a.click();
+  } finally {
+    URL.revokeObjectURL(pngUrl);
+  }
 }
 
 // Renders `svgEl` (the live #map) to a PNG and triggers a browser
@@ -63,45 +114,15 @@ export async function exportSvgAsPng(svgEl, { fileName = 'coastalwx-map.png', ba
   const height = Math.round(rect.height);
   if (width === 0 || height === 0) throw new Error('Map has no rendered size yet.');
 
-  const clone = cloneWithInlinedStyles(svgEl);
-  clone.setAttribute('xmlns', SVG_NS);
-  clone.setAttribute('width', String(width));
-  clone.setAttribute('height', String(height));
+  const image = await rasterizeSvgToImage(svgEl, width, height);
 
-  const svgUrl = URL.createObjectURL(new Blob(
-    [new XMLSerializer().serializeToString(clone)],
-    { type: 'image/svg+xml;charset=utf-8' }
-  ));
+  const canvas = document.createElement('canvas');
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = backgroundColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
 
-  try {
-    const image = await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error('Failed to rasterize the map.'));
-      img.src = svgUrl;
-    });
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width * scale;
-    canvas.height = height * scale;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = backgroundColor;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-    const pngBlob = await new Promise((resolve, reject) => {
-      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Failed to encode PNG.'))), 'image/png');
-    });
-    const pngUrl = URL.createObjectURL(pngBlob);
-    try {
-      const a = document.createElement('a');
-      a.href = pngUrl;
-      a.download = fileName;
-      a.click();
-    } finally {
-      URL.revokeObjectURL(pngUrl);
-    }
-  } finally {
-    URL.revokeObjectURL(svgUrl);
-  }
+  await downloadCanvasAsPng(canvas, fileName);
 }

@@ -21,7 +21,10 @@
       </span>
       <span class="topbar__name">CoastalWx</span>
     </a>
-    <div class="topbar__links">
+    <button type="button" class="topbar__menu-toggle" aria-expanded="false" aria-controls="topbar-links" aria-label="Toggle navigation menu">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+    </button>
+    <div class="topbar__links" id="topbar-links">
       <a class="topbar__link is-active" href="index.html">Live Map</a>
       <a class="topbar__link" href="history.html">Ongoing Storm Analysis</a>
       <a class="topbar__link" href="past.html">Past Storm Analysis</a>
@@ -55,6 +58,7 @@
 
   <div class="content">
     <aside class="system-list" id="system-list" aria-label="Active systems">
+      <button type="button" class="system-list__handle" id="system-list-handle" aria-expanded="false">Active systems</button>
       <div class="sidebar-overview" id="sidebar-overview"></div>
       <p id="system-list-empty" class="system-list__empty">No active disturbances or systems right now.</p>
     </aside>

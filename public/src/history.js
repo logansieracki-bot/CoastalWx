@@ -8,6 +8,9 @@
 // public/src/past.js -- this file only supplies this page's own data
 // source (active, non-archived systems) and demo fallback.
 import { createHistoryPage } from './historyPage.js';
+import { initTopbarNav } from './topbarNav.js';
+
+initTopbarNav();
 
 // A short, several-advisory demo history (one storm, strengthening then
 // weakening) so this page still demonstrates itself with no backend

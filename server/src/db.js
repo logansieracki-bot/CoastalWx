@@ -247,6 +247,17 @@ addColumnIfMissing('scheduled_advisories', 'pending_fields_json', 'TEXT');
 // way, so assignStormName still never reassigns a retired name.
 addColumnIfMissing('systems', 'archived_at', 'TEXT');
 
+// Per-forecast-point gale-force wind field, same NE/SE/SW/NW quadrant shape
+// as systems' own (see systems.js's four gale_radius_*_mi columns) but
+// gale-only (no hurricane-force pair) and PATCH-only, never set at point
+// creation -- see forecastPoints.js's PATCHABLE_FIELDS. Feeds the point's
+// own intensity symbol (constants.js's pointIntensityScore), not the
+// cone's geometry (still driven by spread_mi alone).
+addColumnIfMissing('forecast_points', 'gale_radius_ne_mi', 'REAL');
+addColumnIfMissing('forecast_points', 'gale_radius_se_mi', 'REAL');
+addColumnIfMissing('forecast_points', 'gale_radius_sw_mi', 'REAL');
+addColumnIfMissing('forecast_points', 'gale_radius_nw_mi', 'REAL');
+
 // Widens forecast_interval's CHECK to also allow 3 (alongside the existing
 // 6/12/24), for NHC-style 3-hourly intermediate advisories/cone spacing
 // during an active, fast-moving, or near-landfall situation. Unlike the

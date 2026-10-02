@@ -11,6 +11,9 @@
 // exactly as if it were still active. All the actual rendering lives in
 // historyPage.js, shared between both pages.
 import { createHistoryPage } from './historyPage.js';
+import { initTopbarNav } from './topbarNav.js';
+
+initTopbarNav();
 
 // A single small demo fixture (one classified, now-archived storm, a
 // handful of advisories) so this page still demonstrates itself with no

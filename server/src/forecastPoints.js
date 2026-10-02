@@ -8,6 +8,16 @@ function nextSequence(systemId) {
   return (row.maxSeq ?? 0) + 1;
 }
 
+// Mirrors systems.js's averageRadius exactly -- a single representative
+// gale radius for pointIntensityScore's formula, derived from whichever
+// quadrants have been set via the point's own wind field drag handles, or
+// null until at least one has been.
+function averageRadius(ne, se, sw, nw) {
+  const quadrants = [ne, se, sw, nw];
+  if (quadrants.every((v) => v == null)) return null;
+  return quadrants.reduce((sum, v) => sum + (v ?? 0), 0) / 4;
+}
+
 export function toApi(row) {
   return {
     id: row.id,
@@ -21,6 +31,11 @@ export function toApi(row) {
     hourMode: row.hour_mode,
     hourOverride: row.hour_override,
     status: row.status,
+    galeRadiusNeMi: row.gale_radius_ne_mi,
+    galeRadiusSeMi: row.gale_radius_se_mi,
+    galeRadiusSwMi: row.gale_radius_sw_mi,
+    galeRadiusNwMi: row.gale_radius_nw_mi,
+    galeRadiusMi: averageRadius(row.gale_radius_ne_mi, row.gale_radius_se_mi, row.gale_radius_sw_mi, row.gale_radius_nw_mi),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -66,6 +81,10 @@ const PATCHABLE_FIELDS = {
   hourMode: 'hour_mode',
   hourOverride: 'hour_override',
   status: 'status',
+  galeRadiusNeMi: 'gale_radius_ne_mi',
+  galeRadiusSeMi: 'gale_radius_se_mi',
+  galeRadiusSwMi: 'gale_radius_sw_mi',
+  galeRadiusNwMi: 'gale_radius_nw_mi',
 };
 
 // Not a DB CHECK constraint (see db.js's migration comment) -- validated

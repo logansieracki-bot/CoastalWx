@@ -79,10 +79,26 @@ export function createMapRenderer(svg, geography) {
   const gridGroup = svgElement('g', { id: 'grid-lines' });
   const labelGroup = svgElement('g', { id: 'grid-labels' });
 
-  setPath(geographyGroup, 'land', geography.land);
+  const landPath = setPath(geographyGroup, 'land', geography.land);
   setPath(geographyGroup, 'lake', geography.lakes);
   setPath(geographyGroup, 'country-borders', geography.borders);
   if (geography.states) setPath(geographyGroup, 'state-borders', geography.states);
+
+  // Land-clip mask for watchRenderer.js's zones (id "land-clip" is a fixed,
+  // well-known reference, not exported -- same convention as this app's
+  // other cross-file DOM contracts like the data-wind-handle attribute
+  // name). Reuses landPath's own already-computed `d` rather than re-
+  // deriving it from geography.land a second time, which would redo the
+  // expensive path-string generation over 1500+ land polygons. Built once
+  // here, not in render() below -- land geometry is static (pan/zoom is a
+  // viewBox change, not a re-walk of the geojson), same as landPath itself.
+  if (landPath) {
+    const defs = svgElement('defs');
+    const clipPath = svgElement('clipPath', { id: 'land-clip' });
+    clipPath.append(svgElement('path', { d: landPath.getAttribute('d') }));
+    defs.append(clipPath);
+    svg.append(defs);
+  }
 
   svg.append(geographyGroup, gridGroup, labelGroup);
 

@@ -13,12 +13,6 @@ import { watchColor } from './constants.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-function hexToRgba(hex, alpha) {
-  const n = parseInt(hex.slice(1), 16);
-  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 function el(name, attrs = {}) {
   const node = document.createElementNS(SVG_NS, name);
   for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
@@ -34,6 +28,16 @@ function closedPathD(points) {
 
 export function createWatchRenderer(svg) {
   const layer = el('g', { id: 'watch-layer' });
+  // Clips the whole layer to land -- a zone can be drawn freely over water
+  // (handled entirely by the generic drawingSession/draft preview this
+  // file's own header comment describes, which is unaffected), but once
+  // it's a real rendered watch it should only ever show on land, matching
+  // NHC's own watch/warning graphics. References mapRenderer.js's "land-
+  // clip" clipPath (built once there, from the same land geometry this
+  // map already draws) -- both editor and public share that exact module
+  // (see this file's own import story: createWatchRenderer is imported
+  // directly by public/src/main.js), so one definition covers both pages.
+  layer.setAttribute('clip-path', 'url(#land-clip)');
   svg.append(layer);
 
   function render({ watches }) {
@@ -47,7 +51,7 @@ export function createWatchRenderer(svg) {
       layer.append(el('path', {
         class: 'watch-zone-fill',
         d: closedPathD(smoothed),
-        fill: hexToRgba(color, 0.28),
+        fill: color,
         stroke: color,
         'data-watch-id': watch.id,
         'data-system-id': watch.systemId,

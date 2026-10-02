@@ -39,7 +39,7 @@ body {
 .demo-banner a { color: #ffe9ad; }
 
 .topbar {
-  display: flex; align-items: center; justify-content: space-between;
+  position: relative; display: flex; align-items: center; justify-content: space-between;
   padding: 8px 24px; background: var(--bg-deep); border-bottom: 1px solid var(--border);
   font-size: 12.5px;
 }
@@ -58,6 +58,17 @@ body {
 .topbar__link.is-active { color: var(--text); background: var(--panel); }
 .topbar__link--accent { color: var(--accent); }
 .topbar__link--accent:hover { background: rgba(94, 234, 212, 0.1); }
+
+/* Hidden above the mobile breakpoint -- .topbar__links renders inline
+   there instead (see the base rule above). Shown and given its collapse
+   behavior only inside the 760px block below. */
+.topbar__menu-toggle {
+  display: none; align-items: center; justify-content: center;
+  width: 34px; height: 34px; padding: 0; border-radius: 9px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  cursor: pointer; flex-shrink: 0;
+}
+.topbar__menu-toggle:hover { background: var(--panel-hover); }
 
 .hero {
   min-height: 66px; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px;
@@ -79,13 +90,6 @@ body {
   padding: 6px 12px; border: 1px solid rgba(94, 234, 212, 0.25); border-radius: 999px;
   background: rgba(94, 234, 212, 0.06);
 }
-.hero__editor-link {
-  margin-left: auto; color: var(--text); text-decoration: none; font-size: 12.5px; font-weight: 600;
-  border: 1px solid var(--border); border-radius: 999px; padding: 8px 16px; flex-shrink: 0;
-  transition: background .12s ease, border-color .12s ease;
-}
-.hero__editor-link:hover { background: var(--panel-hover); border-color: rgba(255, 255, 255, 0.22); }
-
 /* Ticker (a sentence, anchored left) and live-status (numbers, anchored
    right via margin-left: auto -- not space-between, so it stays pinned
    to the right edge even when the ticker is hidden at zero systems)
@@ -136,6 +140,10 @@ body {
 }
 .system-list__empty { color: var(--text-muted); font-size: 13px; text-align: center; margin-top: 30px; }
 .system-list__empty[hidden] { display: none; }
+/* Mobile-only bottom-sheet handle for #system-list (live map page) -- see
+   the 760px block below for its actual layout; hidden on desktop, where
+   the sidebar is always fully visible and there's nothing to expand. */
+.system-list__handle { display: none; }
 
 .sidebar-overview { display: flex; gap: 8px; }
 .sidebar-overview__tile {
@@ -299,15 +307,27 @@ body {
 }
 
 @media (max-width: 760px) {
-  .content { flex-direction: column; }
+  .content { position: relative; flex-direction: column; }
+  /* General case (history.html/past.html's #history-list): a plain
+     40%-height strip above the chart -- unchanged from before. Overridden
+     below for index.html's #system-list specifically (an id selector
+     always wins over this class one, regardless of source order). */
   .system-list { width: auto; flex: 0 0 40%; border-right: none; border-bottom: 1px solid var(--border); }
   .map-pane { flex: 1; margin: 14px; }
   .hero { flex-wrap: wrap; }
   .map-legend { gap: 10px; padding: 8px 10px; }
   .map-legend__swatches span { width: 15px; height: 15px; font-size: 8.5px; }
-  .topbar { flex-wrap: wrap; gap: 8px; padding: 8px 14px; }
-  .topbar__links { gap: 2px; }
-  .topbar__link { padding: 5px 8px; }
+
+  .topbar__menu-toggle { display: flex; }
+  .topbar__links {
+    display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 40;
+    flex-direction: column; align-items: stretch; gap: 2px;
+    background: var(--bg-deep); border-bottom: 1px solid var(--border);
+    padding: 8px 14px 12px; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  }
+  .topbar__links.is-open { display: flex; }
+  .topbar__link { padding: 10px 12px; border-radius: 10px; }
+
   .info-bar { flex-direction: column; align-items: stretch; gap: 6px; }
   .live-status-bar { margin-left: 0; padding-left: 0; border-left: none; padding-top: 6px; border-top: 1px solid var(--border); }
   .activity-ticker__text, .live-status-bar__text { white-space: normal; }
@@ -315,4 +335,54 @@ body {
     top: 14px; left: 14px; right: 14px; bottom: auto;
     max-width: none; max-height: 50%;
   }
+
+  /* Live map only. The map goes full-bleed (.map-pane only ever appears
+     on index.html, so no scoping needed here beyond that); #system-list
+     becomes a bottom sheet over it instead of a permanent 40%-height
+     strip, collapsed to just its handle by default and sliding up when
+     tapped -- see main.js's systemListExpanded wiring, which also auto-
+     collapses it on selecting a system or tapping the map outside it. */
+  .map-pane { position: absolute; inset: 0; margin: 10px; flex: none; }
+  #system-list {
+    position: absolute; left: 0; right: 0; bottom: 0; top: auto;
+    flex: none; width: auto; max-height: 75vh;
+    border-bottom: none; border-top: 1px solid var(--border);
+    border-radius: 16px 16px 0 0; z-index: 15;
+    background: rgba(4, 12, 24, 0.97);
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.4);
+    transform: translateY(calc(100% - 56px));
+    transition: transform .28s ease;
+  }
+  #system-list.is-expanded { transform: translateY(0); }
+
+  .system-list__handle {
+    position: relative; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; height: 56px; margin: 0 -14px; padding: 0 14px;
+    background: none; border: none; border-bottom: 1px solid var(--border);
+    color: var(--text); font: inherit; font-weight: 700; font-size: 12.5px;
+    cursor: pointer;
+  }
+  .system-list__handle::before {
+    content: ''; position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    width: 36px; height: 4px; border-radius: 999px; background: var(--border);
+  }
+}
+
+/* Small-phone tightening -- everything above already reads fine down to
+   760px; this covers the genuinely cramped case below it (most phones'
+   own CSS viewport width is well under 430px, so 480px catches all of
+   them with margin, while staying clearly distinct from the 760/860px
+   tiers above -- see history.css's own comment on why 860 isn't 760 for
+   the same "pick a number for a specific, different reason" precedent). */
+@media (max-width: 480px) {
+  .hero__brand h1 { font-size: 16px; }
+  .hero__brand p { font-size: 11px; }
+  /* Icon-only wordmark -- frees up room in the brand+hamburger row, which
+     is the tightest horizontal squeeze on the page at this width. */
+  .topbar__name { display: none; }
+  .map-legend { gap: 8px; padding: 7px 9px; }
+  .map-legend__title { font-size: 9px; }
+  .map-legend__swatches span { width: 13px; height: 13px; font-size: 7.5px; }
+  .system-card__summary { padding: 11px 12px; }
+  .system-card__detail { padding: 0 12px 12px; }
 }
