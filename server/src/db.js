@@ -336,3 +336,45 @@ function migrateForecastIntervalCheck() {
   }
 }
 migrateForecastIntervalCheck();
+
+// Widens watches.level's CHECK to also allow 'advisory' (a third,
+// lower-severity tier below 'watch' -- see constants.js's
+// WATCH_LEVEL_COLORS for the full severity ordering), via the same
+// rebuild dance as migrateForecastIntervalCheck above -- SQLite still has
+// no ALTER TABLE for CHECK constraints. Also recreates
+// idx_watches_system_id, which the DROP TABLE below takes with it.
+function migrateWatchLevelCheck() {
+  const row = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'watches'`).get();
+  if (!row || row.sql.includes(`level IN ('watch', 'advisory', 'warning')`)) return;
+
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    db.exec(`
+      CREATE TABLE watches_new (
+        id TEXT PRIMARY KEY,
+        system_id TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+        product TEXT NOT NULL,
+        level TEXT NOT NULL CHECK (level IN ('watch', 'advisory', 'warning')),
+        points TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+    db.exec(`
+      INSERT INTO watches_new (id, system_id, product, level, points, created_at, updated_at)
+      SELECT id, system_id, product, level, points, created_at, updated_at
+      FROM watches
+    `);
+    db.exec('DROP TABLE watches');
+    db.exec('ALTER TABLE watches_new RENAME TO watches');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_watches_system_id ON watches(system_id)');
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+}
+migrateWatchLevelCheck();

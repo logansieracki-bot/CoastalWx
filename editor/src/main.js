@@ -255,7 +255,7 @@ function renderMap() {
   if (rect.width === 0 || rect.height === 0) return;
   const bounds = currentBounds();
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
-  watchRenderer.render({ watches });
+  watchRenderer.render({ watches: watches.filter((w) => w.systemId === selectedId) });
   trackConeRenderer.render({ points: selectedSystemTrackPoints(), selectedForecastPointId, bounds, width: rect.width, height: rect.height });
   windFieldRenderer.render({ system: systems.find((s) => s.id === selectedId) ?? null, activeThreshold: activeWindThreshold, bounds, width: rect.width, height: rect.height });
   annotationRenderer.render({ annotations: visibleAnnotations(), selectedAnnotationId, draft: drawingSession, systems, bounds, width: rect.width, height: rect.height });

@@ -121,17 +121,21 @@ export function systemColor(system) {
   return PROBABILITY_COLORS[probabilityTier(maxFormationProbabilityPct(system))];
 }
 
-// A watch/warning's severity axis, deliberately a third hue family
-// distinct from both PROBABILITY_COLORS (blue) and CATEGORY_INFO (green
-// through purple) -- standard NWS watch=yellow/warning=red convention,
-// not NHC's hurricane-specific magenta-watch one, since this app is
-// coastal/Nor'easter-focused, not hurricane-focused.
+// A watch/warning/advisory's severity axis, deliberately a third hue
+// family distinct from both PROBABILITY_COLORS (blue) and CATEGORY_INFO
+// (green through purple) -- standard NWS watch=yellow/warning=red
+// convention, not NHC's hurricane-specific magenta-watch one, since this
+// app is coastal/Nor'easter-focused, not hurricane-focused. Advisory is
+// the mildest of the three, not a mid-tier between watch and warning --
+// real NWS severity order is advisory < watch < warning -- so it gets the
+// palest shade of this same yellow-to-red family.
 export const WATCH_LEVEL_COLORS = {
+  advisory: '#fde68a',
   watch: '#eab308',
   warning: '#dc2626',
 };
 
-export const WATCH_LEVEL_LABELS = { watch: 'Watch', warning: 'Warning' };
+export const WATCH_LEVEL_LABELS = { advisory: 'Advisory', watch: 'Watch', warning: 'Warning' };
 
 export function watchColor(level) {
   return WATCH_LEVEL_COLORS[level] ?? WATCH_LEVEL_COLORS.watch;

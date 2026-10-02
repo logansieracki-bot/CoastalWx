@@ -444,7 +444,7 @@ function renderMap() {
   // the live-pulse ring so their colors never disagree with each other.
   const publishedSystems = views.filter((v) => v.published).map((v) => v.system);
   mapRenderer.render({ bounds, width: rect.width, height: rect.height, showGrid: true });
-  watchRenderer.render({ watches: visibleWatchesFrom(views) });
+  watchRenderer.render({ watches: visibleWatchesFrom(views).filter((w) => w.systemId === selectedId) });
   trackConeRenderer.render({ points: selectedView?.published ? selectedView.points : [], selectedForecastPointId: null, bounds, width: rect.width, height: rect.height });
   windFieldRenderer.render({ system: selectedView?.published ? selectedView.system : null, activeThreshold: null, bounds, width: rect.width, height: rect.height });
   renderDiscussionCallout(selected, selectedView, bounds, rect);
@@ -688,10 +688,10 @@ function renderMapLegend() {
     mapLegendCategoryEl.append(swatch);
   }
   // Single-letter abbreviations here follow NWS/VTEC convention (the
-  // "significance" code suffixed onto a product's VTEC string) -- A for
-  // Watch, W for Warning -- rather than inventing new ones.
-  const WATCH_LEVEL_SYMBOL = { watch: 'A', warning: 'W' };
-  for (const key of ['watch', 'warning']) {
+  // "significance" code suffixed onto a product's VTEC string) -- Y for
+  // Advisory, A for Watch, W for Warning -- rather than inventing new ones.
+  const WATCH_LEVEL_SYMBOL = { advisory: 'Y', watch: 'A', warning: 'W' };
+  for (const key of ['advisory', 'watch', 'warning']) {
     const swatch = document.createElement('span');
     swatch.style.background = WATCH_LEVEL_COLORS[key];
     swatch.title = WATCH_LEVEL_LABELS[key];

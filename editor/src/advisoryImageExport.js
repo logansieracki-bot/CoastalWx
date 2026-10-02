@@ -21,6 +21,7 @@ import { createMapRenderer } from './mapRenderer.js';
 import { createTrackConeRenderer } from './trackConeRenderer.js';
 import { createAnnotationRenderer } from './annotationRenderer.js';
 import { createPointRenderer } from './pointRenderer.js';
+import { createWindFieldRenderer } from './windFieldRenderer.js';
 import { rasterizeSvgToImage, downloadCanvasAsPng } from './imageExport.js';
 import { buildStatCardData } from './stormStats.js';
 
@@ -62,10 +63,14 @@ function text(ctx, str, x, y, { font, color, align = 'left', baseline = 'alphabe
   ctx.fillText(str, x, y);
 }
 
-// Builds and tears down the temporary off-screen SVG, drives the 4 live-
-// map renderer factories against it (scoped to just this one system -- no
-// watch zones, wind-field envelopes, or live-pulse animation, same
-// deliberate restriction as the rest of this card), and rasterizes it.
+// Builds and tears down the temporary off-screen SVG, drives the live-map
+// renderer factories against it (scoped to just this one system -- no
+// watch zones or live-pulse animation, same deliberate restriction as the
+// rest of this card). Once a system is an ETC (classified), its cone
+// supersedes its shape as the map's own live rendering already treats it
+// (see editor/src/main.js's visibleAnnotations()) -- this mirrors that
+// split rather than showing both. The wind field (if any) always shows
+// either way, classified or not.
 async function rasterizeMapInset({ system, trackPoints, annotations, geography, width, height }) {
   // The off-screen positioning goes on a wrapper <div>, never on the <svg>
   // itself -- `cloneNode(true)` (inside rasterizeSvgToImage's
@@ -91,6 +96,11 @@ async function rasterizeMapInset({ system, trackPoints, annotations, geography, 
 
   try {
     const mapRenderer = createMapRenderer(svg, geography);
+    // Fill layer appended here (not self-appended by the factory -- see
+    // its own file comment on why), right after the base map and before
+    // the cone/shape/point layers, same z-order the live map uses.
+    const windFieldRenderer = createWindFieldRenderer(svg);
+    svg.append(windFieldRenderer.fieldLayer);
     const trackConeRenderer = createTrackConeRenderer(svg);
     const annotationRenderer = createAnnotationRenderer(svg);
     const pointRenderer = createPointRenderer(svg);
@@ -99,14 +109,14 @@ async function rasterizeMapInset({ system, trackPoints, annotations, geography, 
     const bounds = fitBoundsToAspect(boundsForPoints(trackPoints, { lon: system.lon, lat: system.lat }), aspect);
 
     mapRenderer.render({ bounds, width, height, showGrid: true });
-    trackConeRenderer.render({ points: trackPoints, selectedForecastPointId: null, bounds, width, height });
-    // `annotations` is deliberately this system's own shapes/arrows
-    // regardless of classification status, not main.js's own
-    // visibleAnnotations() (which hides them once classified, since the
-    // live map treats the forecast track as superseding them there) --
-    // the card should show "track on it and shape too" together, per the
-    // user's own request for this feature.
-    annotationRenderer.render({ annotations, selectedAnnotationId: null, draft: null, systems: [system], bounds, width, height });
+    // activeThreshold: null renders only the fill envelopes (gale/hfw, if
+    // set) -- the draggable-handle layer never appears for a static export.
+    windFieldRenderer.render({ system, activeThreshold: null, bounds, width, height });
+    if (system.classified) {
+      trackConeRenderer.render({ points: trackPoints, selectedForecastPointId: null, bounds, width, height });
+    } else {
+      annotationRenderer.render({ annotations, selectedAnnotationId: null, draft: null, systems: [system], bounds, width, height });
+    }
     pointRenderer.render({ systems: [system], selectedId: null, bounds, width, height });
 
     return await rasterizeSvgToImage(svg, width, height);

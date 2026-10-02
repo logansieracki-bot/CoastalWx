@@ -8,7 +8,7 @@ import { requireRole } from './auth.js';
 // convention this app already uses for forecastPoints.js's POINT_STATUSES
 // (validated here, independently hardcoded in the editor's own <select>).
 const WATCH_PRODUCTS = ['coastal_flood', 'storm_surge', 'high_wind', 'winter_storm', 'blizzard', 'gale'];
-const WATCH_LEVELS = ['watch', 'warning'];
+const WATCH_LEVELS = ['advisory', 'watch', 'warning'];
 
 function isValidPoints(points) {
   return Array.isArray(points) && points.length >= 2 &&
