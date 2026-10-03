@@ -41,16 +41,21 @@ function closedPathD(points) {
 
 export function createWatchRenderer(svg) {
   const layer = el('g', { id: 'watch-layer' });
-  // Clips the whole layer to land -- a zone can be drawn freely over water
+  // Masks the whole layer to land -- a zone can be drawn freely over water
   // (handled entirely by the generic drawingSession/draft preview this
   // file's own header comment describes, which is unaffected), but once
   // it's a real rendered watch it should only ever show on land, matching
   // NHC's own watch/warning graphics. References mapRenderer.js's "land-
-  // clip" clipPath (built once there, from the same land geometry this
-  // map already draws) -- both editor and public share that exact module
-  // (see this file's own import story: createWatchRenderer is imported
-  // directly by public/src/main.js), so one definition covers both pages.
-  layer.setAttribute('clip-path', 'url(#land-clip)');
+  // clip" mask (built once there, from the same land geometry this map
+  // already draws, morphologically smoothed so nearby separate land
+  // fragments merge into one clip region and thin spiky protrusions get
+  // trimmed, instead of clipping a zone into a jagged, disconnected mess)
+  // -- both editor and public share that exact module (see this file's own import
+  // story: createWatchRenderer is imported directly by public/src/main.js),
+  // so one definition covers both pages. A <mask>, not a <clipPath>, per
+  // mapRenderer.js's own comment on why -- functionally the same "only
+  // show where land is" contract from this file's point of view.
+  layer.setAttribute('mask', 'url(#land-clip)');
   svg.append(layer);
 
   // Holds the per-pair stripe <pattern>s and their <clipPath>s -- rebuilt
