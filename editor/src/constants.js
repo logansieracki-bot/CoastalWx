@@ -171,6 +171,16 @@ export function watchColor(product, level) {
   return `hsl(${hue}, ${shade.s}%, ${shade.l}%)`;
 }
 
+// Numeric severity for comparing two levels -- advisory < watch < warning,
+// same order WATCH_LEVEL_LABELS is already written in. Used by
+// watchRenderer.js to decide which of two overlapping zones is "dominant"
+// (shows its normal fill) vs. the "accent" (shows as a stripe within the
+// overlap) -- see that file for the full rule.
+const WATCH_LEVEL_RANK = { advisory: 0, watch: 1, warning: 2 };
+export function watchLevelRank(level) {
+  return WATCH_LEVEL_RANK[level] ?? WATCH_LEVEL_RANK.watch;
+}
+
 // Kept in sync by hand with the identical allowlist in
 // server/src/watches.js (validated server-side there; this is only ever
 // the display label both the editor's drafting UI and the public page's
@@ -192,25 +202,6 @@ export function watchProductLabel(product) {
   return WATCH_PRODUCTS.find((p) => p.value === product)?.label ?? product;
 }
 
-// Which overlap treatment a product's zones get when two of them overlap
-// on the same system (see watchRenderer.js): 'lane' for coastline-hugging
-// hazards (rendered as a fill plus outline-only additional zones so none
-// hide each other), 'stripe' for area/polygon hazards (rendered as a
-// diagonal two-color pattern over the overlap region). Scoped to same-
-// geometry-type pairs only -- a lane zone overlapping a stripe zone just
-// renders stacked as normal, no cross-category blending.
-export const WATCH_GEOMETRY_TYPE = {
-  coastal_flood: 'lane',
-  storm_surge: 'lane',
-  high_wind: 'stripe',
-  winter_storm: 'stripe',
-  blizzard: 'stripe',
-  gale: 'stripe',
-};
-
-export function watchGeometryType(product) {
-  return WATCH_GEOMETRY_TYPE[product] ?? 'stripe';
-}
 
 // Used everywhere a mile radius needs converting to a degree radius (cone
 // spread, forecast-point geometry) -- one shared constant instead of being
