@@ -60,8 +60,14 @@ forecastPointsRouter.get('/forecast-points', (req, res) => {
 });
 
 forecastPointsRouter.post('/systems/:systemId/forecast-points', requireRole(...ROLES), (req, res) => {
-  const system = db.prepare('SELECT id FROM systems WHERE id = ?').get(req.params.systemId);
+  const system = db.prepare('SELECT id, classified FROM systems WHERE id = ?').get(req.params.systemId);
   if (!system) return res.status(404).json({ error: 'system not found' });
+  // A forecast point only makes sense once classified -- a cone/track is
+  // the classified-stage replacement for a Disturbance/Invest's shapes
+  // (see editor/src/main.js's renderSelectedPanel). The editor UI only
+  // disables its "Add Forecast Point" button for this; enforcing it here
+  // too closes the gap that let one reach an unclassified system at all.
+  if (!system.classified) return res.status(409).json({ error: 'system_not_classified' });
 
   const { lon, lat, hour, windMph, spreadMi, hourMode } = req.body ?? {};
   if (typeof lon !== 'number' || typeof lat !== 'number' || typeof hour !== 'number') {

@@ -295,7 +295,7 @@ function publicViewFor(system) {
   const snapSystem = advisory.snapshot.system;
   return {
     system: snapSystem,
-    points: mapTrackPoints(advisory.snapshot.forecastPoints ?? [], snapSystem),
+    points: snapSystem.classified ? mapTrackPoints(advisory.snapshot.forecastPoints ?? [], snapSystem) : [],
     annotations: (advisory.snapshot.annotations ?? []).map((a) => ({ ...a, points: pointsFromWire(a.points) })),
     watches: (advisory.snapshot.watches ?? []).map((w) => ({ ...w, points: pointsFromWire(w.points) })),
     published: true,

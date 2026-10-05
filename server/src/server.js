@@ -18,6 +18,13 @@ const PUBLIC_DIR = join(__dirname, '..', '..', 'public');
 
 const app = express();
 app.use(express.json());
+// Every /api response is either live, user-specific, or meant to reflect
+// a just-made change (a delete, a publish) immediately -- never a page
+// this app wants a browser or intermediate proxy caching on its own.
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 app.use('/api', authRouter);
 app.use('/api', systemsRouter);
 app.use('/api', annotationsRouter);

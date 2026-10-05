@@ -64,7 +64,14 @@ export function publishAdvisory(system, { headline, discussion, issuedByUserId, 
   // is the ONLY thing the public page ever reads for a system (see
   // public/src/main.js's publicViewFor) -- nothing on the map updates
   // until this runs again.
-  const forecastPoints = db.prepare('SELECT * FROM forecast_points WHERE system_id = ? ORDER BY sequence ASC').all(system.id);
+  // Forecast points are only ever meaningful once classified (see this
+  // repo's own cone/track gating elsewhere) -- excluding them here too,
+  // not just at render time, means a snapshot can never embed a cone for
+  // an Invest no matter how those rows got into the table (pre-
+  // classification, or left over from before a declassify).
+  const forecastPoints = system.classified
+    ? db.prepare('SELECT * FROM forecast_points WHERE system_id = ? ORDER BY sequence ASC').all(system.id)
+    : [];
   const annotationRows = db.prepare('SELECT * FROM annotations WHERE system_id = ? ORDER BY created_at ASC').all(system.id);
   const watchRows = db.prepare('SELECT * FROM watches WHERE system_id = ? ORDER BY created_at ASC').all(system.id);
   const snapshot = {
